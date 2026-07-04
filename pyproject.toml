@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["pptx-translate/tests"]
+addopts = ["-v", "--tb=short", "--strict-markers", "--capture=no"]
+markers = [
+    "unit: Tests for individual functions in isolation (default for all tests)",
+    "font: Tests related to font detection and replacement",
+    "translation: Tests related to translation workflow",
+    "slow: Tests that take longer to run (marked for occasional execution)",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:pptx.*",
+    "ignore::UserWarning:lxml.*",
+]
+
+[project]
+name = "skills"
+version = "0.1.0"
+description = "CodeBuddy skills collection"
+requires-python = ">=3.12"
+dependencies = []

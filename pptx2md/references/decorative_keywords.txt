@@ -1,0 +1,8 @@
+# Title keywords whose standalone decorative pictures are dropped on
+# non-diagram slides. When a slide's `##` title CONTAINS any keyword here,
+# its standalone pictures are skipped (the extracted text already captures
+# the content) so the KB/RAG output stays text-only without losing signal.
+# One keyword per line; lines starting with `#` and blank lines are ignored.
+# Edit this file per deck — the list is loaded at runtime, never hard-coded.
+业务痛点
+应用价值

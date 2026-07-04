@@ -1,0 +1,3 @@
+[submodule "sg-bank-to-md"]
+	path = sg-bank-to-md
+	url = https://github.com/shaowen310/sg-bank-pdf-parser.git
