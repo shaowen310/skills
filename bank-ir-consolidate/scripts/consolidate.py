@@ -33,6 +33,46 @@ def _version_ge(a: str, b: str) -> bool:
     return _parts(a) >= _parts(b)
 
 
+def _to_iso_date(value: str | None) -> str | None:
+    """Best-effort normalization of a period date to ISO YYYY-MM-DD.
+
+    Handles the formats actually emitted by the source extractors:
+    ``YYYY-MM-DD`` (already ISO), ``YYYY/MM/DD`` (ICBC), and ``DD Mon YYYY``
+    (OCBC consolidated). Returns the original string untouched if no pattern
+    matches, so callers can still surface it (and warn) rather than silently
+    dropping it.
+    """
+    if not value:
+        return None
+    s = str(value).strip()
+    s_slash = s.replace("/", "-").replace(" ", "-")
+    parts = s_slash.split("-")
+    if len(parts) == 3:
+        a, b, c = parts
+        # ISO or slash form: all numeric → YYYY-MM-DD.
+        if a.isdigit() and b.isdigit() and c.isdigit():
+            return f"{a}-{b.zfill(2)}-{c.zfill(2)}"
+        # OCBC consolidated form "DD Mon YYYY" (e.g. "30-JUN-2026"): middle
+        # token is an alphabetic month abbreviation.
+        if a.isdigit() and b.isalpha() and c.isdigit():
+            try:
+                return datetime.strptime(f"{a}-{b}-{c}", "%d-%b-%Y").strftime("%Y-%m-%d")
+            except ValueError:
+                return value
+    return value
+
+
+def _is_iso_date(value: str | None) -> bool:
+    """Return True iff ``value`` is a valid ISO ``YYYY-MM-DD`` date."""
+    if not value:
+        return False
+    try:
+        _ = datetime.strptime(str(value).strip(), "%Y-%m-%d")
+        return True
+    except ValueError:
+        return False
+
+
 def _merge_fd(accs: list[Any]) -> list[Any] | None:
     """Concatenate fd_records across statements, de-dup by deposit_no."""
     recs: list[Any] = []
@@ -139,19 +179,36 @@ def consolidate_statements(
         for _, s in stmts_with_paths
         if s.statement_meta.period_to
     ]
+    # Normalize every input period to ISO before comparing, so a stray
+    # non-ISO value can't win a lexicographic min/max and produce a
+    # mixed-format pair (the original bug).
+    periods_from_norm = [p for p in (_to_iso_date(x) for x in periods_from) if p]
+    periods_to_norm = [p for p in (_to_iso_date(x) for x in periods_to) if p]
+    non_iso_periods: list[str] = []
+    for raw, norm in zip(periods_from + periods_to, periods_from_norm + periods_to_norm):
+        if norm != raw and not (norm or "").startswith(("19", "20")):
+            non_iso_periods.append(raw)
     meta = ir.StatementMeta(
         institution="",
         institution_code=None,
         account_holder=None,
         currency="",
-        period_from=min(periods_from) if periods_from else None,
-        period_to=max(periods_to) if periods_to else None,
+        period_from=min(periods_from_norm) if periods_from_norm else None,
+        period_to=max(periods_to_norm) if periods_to_norm else None,
     )
     min_ir = min((s.ir_version for _, s in stmts_with_paths), default=DEFAULT_MIN_IR_VERSION)
     warnings: list[str] = []
     for src_path, stmt in stmts_with_paths:
         for w in stmt.warnings:
             warnings.append(f"{stmt.source_file or src_path}: {w}")
+    for raw in non_iso_periods:
+        warnings.append(f"period date not ISO-normalizable: {raw!r}")
+    # Final guard: the consolidated period pair must be ISO. If normalization
+    # couldn't make it so, surface a warning rather than emit a mixed/raw value.
+    for field in ("period_from", "period_to"):
+        val = getattr(meta, field)
+        if val is not None and not _is_iso_date(val):
+            warnings.append(f"consolidated {field} is not an ISO date: {val!r}")
 
     consolidated = ir.ParsedStatement(
         ir_version=min_ir,
