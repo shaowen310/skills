@@ -37,6 +37,174 @@ def _account_institution(acc: Any) -> str:
     return acc.institution or "—"
 
 
+def _get_balance(acc: Any) -> float:
+    """Get the effective balance of an account.
+
+    Falls back through:
+    1. ``acc.balance``
+    2. ``acc.closing_balance``
+    3. Last transaction's ``balance_after`` (common for OCBC accounts)
+    4. FD record principal (for OCBC TIME DEPOSITS-style accounts)
+    5. 0.0
+    """
+    if acc.balance is not None:
+        return acc.balance
+    if acc.closing_balance is not None:
+        return acc.closing_balance
+    if acc.transactions:
+        last_ba = None
+        for t in acc.transactions:
+            if t.balance_after is not None:
+                last_ba = t.balance_after
+        if last_ba is not None:
+            return last_ba
+    if acc.fd_records:
+        return sum(getattr(r, "principal", 0) or 0 for r in acc.fd_records)
+    return 0.0
+
+
+def _sgd_equiv(balance: float, currency: str, fx_rates: dict[str, float]) -> float | None:
+    """Compute SGD equivalent of *balance* in *currency* using the given FX rates."""
+    rate = fx_rates.get(currency)
+    if rate is None:
+        return None
+    return balance * rate
+
+
+# Net Position display types: (account_type, section_heading) in display order.
+_NET_POSITION_TYPES: list[tuple[str, str]] = [
+    ("current", "Current Accounts"),
+    ("fixed_deposit", "Fixed Deposits"),
+    ("srs", "SRS"),
+    ("credit_card", "Credit Cards"),
+    ("ewallet", "E-wallets"),
+    ("unit_trust", "Unit Trusts"),
+    ("unknown", "Other Accounts"),
+]
+
+# FX rate display order (for the FX rate table).
+_FX_RATE_CCY_ORDER: list[str] = ["SGD", "USD", "JPY", "CNY"]
+
+
+def _render_net_position(model: Any, mask_id: Any, do_mask: bool) -> list[str]:
+    lines: list[str] = []
+    lines.append("## Net Position")
+    lines.append("")
+
+    period_to = model.period_to or "—"
+    lines.append(f"### FX Rate Table (as of {period_to})")
+    lines.append("")
+    lines.append(
+        "*Mid-market rates from ValutaFX (last business day before "
+        + f"{period_to} if it falls on a weekend). "
+        + "SGD per 1 unit of foreign currency.*"
+    )
+    lines.append("")
+    lines.append("| Currency | Mid-market (1 SGD =) | SGD per 1 unit |")
+    lines.append("| --- | --- | ---: |")
+    # Look up inverse rates (1 SGD = X CCY) from the model's fx_rates.
+    for ccy in _FX_RATE_CCY_ORDER:
+        rate = model.fx_rates.get(ccy)
+        if rate is None or ccy == "SGD":
+            inv = "—"
+            fwd = "1.0000"
+        else:
+            inv = f"{1.0 / rate:.4f}"
+            fwd = f"{rate:.4f}"
+        lines.append(f"| {ccy} | {inv} | {fwd} |")
+    lines.append("")
+
+    # Group accounts by type.
+    by_type: dict[str, list[Any]] = {}
+    for a in model.accounts:
+        by_type.setdefault(a.account_type, []).append(a)
+
+    grand_total_sgd = 0.0
+
+    for atype, heading in _NET_POSITION_TYPES:
+        accounts = by_type.get(atype)
+        if not accounts:
+            continue
+
+        lines.append(f"### {heading}")
+        lines.append("")
+
+        if atype == "fixed_deposit":
+            lines.append(
+                "| Bank | Account | Currency | Principal | Balance (SGD) |"
+            )
+            lines.append(
+                "| --- | --- | --- | ---: | ---: |"
+            )
+        else:
+            lines.append(
+                "| Bank | Account | Currency | Balance | Balance (SGD) |"
+            )
+            lines.append(
+                "| --- | --- | --- | ---: | ---: |"
+            )
+
+        type_total_sgd = 0.0
+        zero_bal_wallets: list[str] = []
+
+        for acc in sorted(accounts, key=lambda a: (a.institution or "", a.account_no or "")):
+            bal = _get_balance(acc)
+
+            if bal == 0:
+                # Collect zero-balance wallets for a footnote instead of cluttering the table.
+                inst = _account_institution(acc)
+                ccy = acc.currency or "—"
+                zero_bal_wallets.append(f"{inst} {ccy}")
+                continue
+
+            sgd_val = _sgd_equiv(bal, acc.currency or "SGD", model.fx_rates)
+            if sgd_val is None:
+                sgd_equiv_display = "—"
+                row_sgd = 0.0
+            else:
+                sgd_equiv_display = f"{sgd_val:,.2f}"
+                row_sgd = sgd_val
+            acct_id = mask_id(acc.account_no, do_mask=do_mask)
+            inst = _account_institution(acc)
+            ccy = acc.currency or "—"
+            bal_str = f"{bal:,.2f}"
+
+            if atype == "fixed_deposit":
+                lines.append(
+                    f"| {inst} | {acct_id} | {ccy} | {bal_str} | {sgd_equiv_display} |"
+                )
+            else:
+                lines.append(
+                    f"| {inst} | {acct_id} | {ccy} | {bal_str} | {sgd_equiv_display} |"
+                )
+            type_total_sgd += row_sgd
+
+        lines.append(
+            f"| | **Subtotal** | | | **{type_total_sgd:,.2f}** |"
+        )
+        lines.append("")
+
+        if zero_bal_wallets:
+            grouped: dict[str, list[str]] = {}
+            for entry in zero_bal_wallets:
+                inst, ccy = entry.split(" ", 1)
+                grouped.setdefault(inst, []).append(ccy)
+            notes = []
+            for inst in sorted(grouped):
+                notes.append(f"{inst} ({', '.join(sorted(grouped[inst]))})")
+            lines.append(f"  _Zero-balance accounts: {'; '.join(notes)}._")
+
+        grand_total_sgd += type_total_sgd
+
+    # Grand total line.
+    lines.append(f"### Grand Total")
+    lines.append("")
+    lines.append(f"**{grand_total_sgd:,.2f} SGD**")
+    lines.append("")
+
+    return lines
+
+
 def render(
     model: Any,
     helpers: types.ModuleType,
@@ -59,17 +227,7 @@ def render(
     lines.append("")
 
     # --- Net Position (from model) ---
-    lines.append("## Net Position")
-    lines.append("")
-    lines.append(f"- **Total (SGD, where available)**: {_money(model.net_sgd, 'SGD')}")
-    # Skip zero-balance currencies so the table only shows meaningful rows.
-    non_zero_ccy = {ccy: bal for ccy, bal in model.per_ccy_balances.items() if bal}
-    if non_zero_ccy:
-        lines.append("")
-        lines.append("Per-currency balances:")
-        for ccy in sorted(non_zero_ccy):
-            lines.append(f"- {ccy}: {_money(non_zero_ccy[ccy])}")
-    lines.append("")
+    lines.extend(_render_net_position(model, mask_id, do_mask))
 
     # --- Combined transactions: one section per account type, one table per currency ---
     def _render_ccy_section(tables: list[Any], heading: str) -> None:
@@ -150,6 +308,9 @@ def render(
                 for t in acc.transactions:
                     if t.amount == 0:
                         continue  # skip zero-amount transactions
+                    # Skip internal "PAYMENT BY INTERNET" lines (negative amount).
+                    if t.amount < 0 and "PAYMENT BY INTERNET" in (t.description or "").upper():
+                        continue
                     desc = mask_desc(t.description, do_mask=do_mask) if do_mask else t.description
                     if t.amount < 0:
                         wd, dp = _money(abs(t.amount), t.currency), ""

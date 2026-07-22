@@ -5,11 +5,26 @@ duplication) while giving the markdown renderer a clean, render-ready structure.
 
 Masking is intentionally NOT applied here — descriptions/account numbers stay
 raw so the data remains unmasked; masking happens at render time.
+
+FX rates (``DEFAULT_FX_RATES``) are **not embedded in the statement data**;
+they are sourced externally (e.g. ValutaFX historical mid-market rates) and
+used to estimate SGD-equivalent values for non-SGD accounts in the Net Position
+section. Override by passing a custom ``fx_rates`` dict on construction.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
+
+# FX rates — SGD per 1 unit of foreign currency, mid-market as of period_to
+# (last business day: 2026-07-17 since 2026-07-18 is a Saturday).
+# Source: ValutaFX historical rates; 1 SGD = 0.7745 USD, 125.82 JPY, 5.2473 CNY.
+DEFAULT_FX_RATES: dict[str, float] = {
+    "SGD": 1.0,
+    "USD": 1.2912,     # 1 / 0.7745
+    "JPY": 0.0079498,  # 1 / 125.82
+    "CNY": 0.19057,    # 1 / 5.2473
+}
 
 # Account types that carry FD/investment records instead of spend transactions.
 _NON_TXN_ACCOUNTS = ("fixed_deposit", "unit_trust")
@@ -63,6 +78,7 @@ class RenderModel:
     period_to: str | None
     net_sgd: float
     per_ccy_balances: dict[str, float]
+    fx_rates: dict[str, float]       # currency → SGD per 1 unit (SGD = 1.0)
     txn_tables_by_type: dict[str, list[CurrencyTable]]
     accounts: list[Any]      # original accounts, for the per-bank drill-down
     warnings: list[str]
@@ -73,11 +89,23 @@ def _account_institution(acc: Any) -> str:
     return acc.institution or ""
 
 
-def build_render_model(stmt: Any) -> RenderModel:
+def _skip_in_consolidated_table(txn: Any) -> bool:
+    """Internal lines excluded from the consolidated combined transaction table.
+
+    DBS labels internet-banking transfers as ``PAYMENT BY INTERNET``; these carry
+    a negative (debit) amount and are internal/posted summaries that shouldn't
+    appear in the consolidated table (nor in its totals / running net).
+    """
+    return txn.amount < 0 and "PAYMENT BY INTERNET" in (txn.description or "").upper()
+
+
+def build_render_model(stmt: Any, fx_rates: dict[str, float] | None = None) -> RenderModel:
     meta = stmt.statement_meta
     consolidation = (stmt.extras or {}).get("consolidation", {})
     sources = consolidation.get("sources", [])
     institutions = sorted({s.get("institution") for s in sources if s.get("institution")})
+
+    effective_fx = {**DEFAULT_FX_RATES, **(fx_rates or {})}
 
     net_sgd = sum(a.balance_sgd for a in stmt.accounts if a.balance_sgd is not None)
     per_ccy: dict[str, float] = {}
@@ -92,6 +120,8 @@ def build_render_model(stmt: Any) -> RenderModel:
             continue
         bank = _account_institution(acc)
         for t in acc.transactions:
+            if _skip_in_consolidated_table(t):
+                continue
             wd = abs(t.amount) if t.amount < 0 else None
             dp = t.amount if t.amount > 0 else None
             ct = by_type_ccy.setdefault(
@@ -135,6 +165,7 @@ def build_render_model(stmt: Any) -> RenderModel:
         period_to=meta.period_to,
         net_sgd=net_sgd,
         per_ccy_balances=per_ccy,
+        fx_rates=effective_fx,
         txn_tables_by_type=txn_tables_by_type,
         accounts=stmt.accounts,
         warnings=stmt.warnings,
