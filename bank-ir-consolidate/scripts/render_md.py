@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """render_md.py — render a consolidated (or any) IR JSON into markdown.
 
-Reads a ``ParsedStatement`` IR JSON (typically the output of ``consolidate.py``)
-and writes a human-readable, cross-bank markdown summary with masking applied
-(consistent with ``sg-bank-to-md``).
+Reads a ``ParsedStatement`` IR JSON (typically the output of ``consolidate.py``),
+builds a render-oriented ``RenderModel`` and writes a human-readable, cross-bank
+markdown summary with masking applied (consistent with ``sg-bank-to-md``).
 
 Usage:
     python render_md.py consolidated.ir.json -o consolidated.md
@@ -20,6 +20,7 @@ from typing import Any
 # Allow running as a standalone script from scripts/ or the repo root.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _parser_loader import load_parser_modules  # noqa: E402
+from render_model import build_render_model, TXN_SECTION_ORDER  # noqa: E402
 
 
 def _money(v: float | None, currency: str = "") -> str:
@@ -31,50 +32,84 @@ def _money(v: float | None, currency: str = "") -> str:
         return str(v)
 
 
+def _account_institution(acc: Any) -> str:
+    """Resolve the owning institution from the account's institution field."""
+    return acc.institution or "—"
+
+
 def render(
-    stmt: Any,
+    model: Any,
     helpers: types.ModuleType,
     common: types.ModuleType,
     do_mask: bool,
 ) -> str:
     mask_desc = helpers.md_masked_description
     mask_id = common.mask_id
-    meta = stmt.statement_meta
     lines: list[str] = []
 
+    # --- Header / meta (from model) ---
     lines.append("# Consolidated Bank Statement")
     lines.append("")
-    consolidation = (stmt.extras or {}).get("consolidation", {})
-    sources = consolidation.get("sources", [])
-    lines.append(f"- **Statements consolidated**: {len(sources)}")
-    institutions = sorted({s.get("institution") for s in sources if s.get("institution")})
-    if institutions:
-        lines.append(f"- **Banks**: {', '.join(institutions)}")
-    period = " → ".join(filter(None, [meta.period_from or "", meta.period_to or ""]))
+    lines.append(f"- **Statements consolidated**: {len(model.sources)}")
+    if model.institutions:
+        lines.append(f"- **Banks**: {', '.join(model.institutions)}")
+    period = " → ".join(filter(None, [model.period_from or "", model.period_to or ""]))
     if period:
         lines.append(f"- **Period**: {period}")
     lines.append("")
 
-    # --- Net Position ---
+    # --- Net Position (from model) ---
     lines.append("## Net Position")
     lines.append("")
-    sgd = sum(a.balance_sgd for a in stmt.accounts if a.balance_sgd is not None)
-    lines.append(f"- **Total (SGD, where available)**: {_money(sgd, 'SGD')}")
-    per_ccy: dict[str, float] = {}
-    for a in stmt.accounts:
-        if a.balance is not None and a.currency:
-            per_ccy[a.currency] = per_ccy.get(a.currency, 0.0) + a.balance
-    if per_ccy:
+    lines.append(f"- **Total (SGD, where available)**: {_money(model.net_sgd, 'SGD')}")
+    if model.per_ccy_balances:
         lines.append("")
         lines.append("Per-currency balances:")
-        for ccy in sorted(per_ccy):
-            lines.append(f"- {ccy}: {_money(per_ccy[ccy], ccy)}")
+        for ccy in sorted(model.per_ccy_balances):
+            lines.append(f"- {ccy}: {_money(model.per_ccy_balances[ccy], ccy)}")
     lines.append("")
 
-    # --- Group accounts by institution ---
+    # --- Combined transactions: one section per account type, one table per currency ---
+    def _render_ccy_section(tables: list[Any], heading: str) -> None:
+        lines.append(f"## {heading} (by Currency)")
+        lines.append("")
+        for ct in tables:
+            lines.append(f"### {ct.currency}")
+            lines.append("")
+            lines.append("| Date | Bank | Account | Description | Withdrawal | Deposit | Balance |")
+            lines.append("| --- | --- | --- | --- | ---: | ---: | ---: |")
+            for r in ct.rows:
+                acct = mask_id(r.account, do_mask=do_mask)
+                desc = mask_desc(r.description, do_mask=do_mask) if do_mask else r.description
+                wd = f"{r.withdrawal:,.2f}" if r.withdrawal is not None else ""
+                dp = f"{r.deposit:,.2f}" if r.deposit is not None else ""
+                bal = _money(r.balance_after, r.currency)
+                lines.append(
+                    f"| {r.date} | {r.bank} | {acct} | {desc} | {wd} | {dp} | {bal} |"
+                )
+            lines.append(
+                f"| | | | **Total** | {ct.total_withdrawal:,.2f} | "+
+                f"{ct.total_deposit:,.2f} | |"
+            )
+            lines.append("")
+
+    covered: set[str] = set()
+    for atype, heading in TXN_SECTION_ORDER:
+        tables = model.txn_tables_by_type.get(atype)
+        if tables:
+            _render_ccy_section(tables, heading)
+            covered.add(atype)
+    # Fallback for any transaction-bearing type not in the canonical order list.
+    for atype in sorted(model.txn_tables_by_type):
+        if atype in covered:
+            continue
+        heading = f"{atype.replace('_', ' ').title()} Transactions"
+        _render_ccy_section(model.txn_tables_by_type[atype], heading)
+
+    # --- Per-bank drill-down ---
     by_inst: dict[str, list[Any]] = {}
-    for a in stmt.accounts:
-        inst = (a.extras or {}).get("_source_institution") or "—"
+    for a in model.accounts:
+        inst = _account_institution(a)
         by_inst.setdefault(inst, []).append(a)
 
     for inst in sorted(by_inst):
@@ -150,16 +185,16 @@ def render(
         lines.append("")
 
     # --- Warnings ---
-    if stmt.warnings:
+    if model.warnings:
         lines.append("## Warnings")
         lines.append("")
-        for w in stmt.warnings:
+        for w in model.warnings:
             lines.append(f"- {w}")
         lines.append("")
 
     lines.append("---")
     lines.append("")
-    lines.append(f"_Auto-generated by bank-ir-consolidate from consolidated IR ({stmt.ir_version})._")
+    lines.append(f"_Auto-generated by bank-ir-consolidate from consolidated IR ({model.ir_version})._")
     return "\n".join(lines)
 
 
@@ -174,7 +209,7 @@ def main() -> None:
     pm = load_parser_modules(args.parser_dir)
     text = Path(args.input).read_text(encoding="utf-8")
     stmt = pm.ir_schema.from_json(text)
-    md = render(stmt, pm.helpers, pm.common, do_mask=not args.no_mask)
+    md = render(build_render_model(stmt), pm.helpers, pm.common, do_mask=not args.no_mask)
     out = Path(args.out)
     _ = out.write_text(md, encoding="utf-8")
     print(f"Wrote {out}")

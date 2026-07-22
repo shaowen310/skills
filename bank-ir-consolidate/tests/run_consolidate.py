@@ -30,6 +30,7 @@ from consolidate import (  # noqa: E402  # pyright: ignore[reportMissingImports]
 )
 from _parser_loader import load_parser_modules  # noqa: E402  # pyright: ignore[reportMissingImports]
 from render_md import render as render_md  # noqa: E402  # pyright: ignore[reportMissingImports]
+from render_model import build_render_model  # noqa: E402  # pyright: ignore[reportMissingImports]
 
 DEFAULT_CACHE = HERE / "cache"
 DEFAULT_OUTPUT = HERE / "outputs" / "consolidated.ir.json"
@@ -89,7 +90,7 @@ def main() -> None:
     _ = out.write_text(consolidated.to_json(indent=args.indent), encoding="utf-8")
 
     # Render the consolidated IR to a human-readable markdown summary.
-    md = render_md(consolidated, pm.helpers, pm.common, do_mask=not args.no_mask)
+    md = render_md(build_render_model(consolidated), pm.helpers, pm.common, do_mask=not args.no_mask)
     out_md = Path(args.out_md)
     out_md.parent.mkdir(parents=True, exist_ok=True)
     _ = out_md.write_text(md, encoding="utf-8")

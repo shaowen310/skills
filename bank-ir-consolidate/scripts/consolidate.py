@@ -109,7 +109,6 @@ def consolidate_statements(
         txns.sort(key=_txn_sort_key)
 
         extras = dict(base.extras or {})
-        extras["_source_institution"] = _inst
 
         merged_accounts.append(
             ir.Account(
@@ -118,6 +117,7 @@ def consolidate_statements(
                 account_type=base.account_type,
                 currency=base.currency,
                 account_holder=base.account_holder,
+                institution=_inst,
                 opening_balance=base.opening_balance,
                 closing_balance=base.closing_balance,
                 balance=base.balance,
