@@ -62,11 +62,13 @@ def render(
     lines.append("## Net Position")
     lines.append("")
     lines.append(f"- **Total (SGD, where available)**: {_money(model.net_sgd, 'SGD')}")
-    if model.per_ccy_balances:
+    # Skip zero-balance currencies so the table only shows meaningful rows.
+    non_zero_ccy = {ccy: bal for ccy, bal in model.per_ccy_balances.items() if bal}
+    if non_zero_ccy:
         lines.append("")
         lines.append("Per-currency balances:")
-        for ccy in sorted(model.per_ccy_balances):
-            lines.append(f"- {ccy}: {_money(model.per_ccy_balances[ccy], ccy)}")
+        for ccy in sorted(non_zero_ccy):
+            lines.append(f"- {ccy}: {_money(non_zero_ccy[ccy])}")
     lines.append("")
 
     # --- Combined transactions: one section per account type, one table per currency ---
@@ -83,7 +85,7 @@ def render(
                 desc = mask_desc(r.description, do_mask=do_mask) if do_mask else r.description
                 wd = f"{r.withdrawal:,.2f}" if r.withdrawal is not None else ""
                 dp = f"{r.deposit:,.2f}" if r.deposit is not None else ""
-                bal = _money(r.balance_after, r.currency)
+                bal = _money(r.balance_after)  # currency omitted; table is grouped by currency (### header)
                 lines.append(
                     f"| {r.date} | {r.bank} | {acct} | {desc} | {wd} | {dp} | {bal} |"
                 )
