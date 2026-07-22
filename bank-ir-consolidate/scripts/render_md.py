@@ -298,8 +298,6 @@ def render(
                 )
             elif acc.balance is not None:
                 lines.append(f"- **Balance**: {_money(acc.balance, acc.currency)}")
-            if acc.balance_sgd is not None:
-                lines.append(f"- **Balance (SGD)**: {_money(acc.balance_sgd, 'SGD')}")
             lines.append("")
 
             if acc.transactions:

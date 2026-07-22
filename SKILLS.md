@@ -160,7 +160,7 @@ Composite workflows that chain one or more basic skills.
   - **Consolidation** — groups accounts by `(institution, account_no, name)`, concatenates transactions across statements, and de-duplicates by `txn_id` (handles overlapping statement periods)
   - **Version gate** — carries forward the minimum `ir_version` and refuses IR older than `2026.3` (enforced by `from_json`)
   - **Provenance** — records every source file, parser, period, and counts in `extras.consolidation.sources`; dedup count tracked
-  - **Cross-bank Markdown** — Net Position (SGD total where `balance_sgd` is available, plus per-currency balances), per-bank/per-account transaction tables, Fixed Deposit and Investment holdings sections
+  - **Cross-bank Markdown** — Net Position (SGD-equivalent via FX rates, plus per-currency balances), per-bank/per-account transaction tables, Fixed Deposit and Investment holdings sections
   - **Consistent masking** — reuses `sg_bank_pdf_parser`'s masking helpers so account/deposit numbers and names stay masked, matching `sg-bank-to-md` (disable with `--no-mask`)
 - **Use When**: User has IR JSON from multiple bank statements and wants them merged into one file and/or summarized in Markdown
 - **Triggers**: "consolidate bank IR JSON", "merge DBS/OCBC/UOB/ICBC statements", "multi-bank summary markdown", "combine bank statement IR", "merge *.ir.json"

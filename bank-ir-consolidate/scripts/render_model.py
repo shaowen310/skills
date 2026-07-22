@@ -107,7 +107,12 @@ def build_render_model(stmt: Any, fx_rates: dict[str, float] | None = None) -> R
 
     effective_fx = {**DEFAULT_FX_RATES, **(fx_rates or {})}
 
-    net_sgd = sum(a.balance_sgd for a in stmt.accounts if a.balance_sgd is not None)
+    net_sgd = 0.0
+    for a in stmt.accounts:
+        if a.balance is not None and a.currency:
+            rate = effective_fx.get(a.currency)
+            if rate is not None:
+                net_sgd += a.balance * rate
     per_ccy: dict[str, float] = {}
     for a in stmt.accounts:
         if a.balance is not None and a.currency:

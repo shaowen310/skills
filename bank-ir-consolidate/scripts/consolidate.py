@@ -161,7 +161,6 @@ def consolidate_statements(
                 opening_balance=base.opening_balance,
                 closing_balance=base.closing_balance,
                 balance=base.balance,
-                balance_sgd=base.balance_sgd,
                 transactions=txns,
                 fd_records=_merge_fd(accs),
                 investment_holdings=_merge_inv(accs),

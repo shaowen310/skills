@@ -40,7 +40,7 @@ cross-bank, multi-account, multi-currency markdown report.
    python scripts/render_md.py consolidated.ir.json -o consolidated.md
    ```
 
-   - Net Position (SGD total where `balance_sgd` is available, plus per-currency
+   - Net Position (SGD-equivalent via FX rates, plus per-currency
      native balances).
    - Per-bank, per-account transaction tables, FD records, and investment
      holdings.
