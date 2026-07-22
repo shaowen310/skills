@@ -21,7 +21,6 @@ and/or ``PyMuPDF`` so vector diagrams still convert to viewable PNG.
 from __future__ import annotations
 
 import importlib.util
-import json
 import sys
 from pathlib import Path
 
@@ -59,23 +58,17 @@ def main() -> None:
         out_md = OUTPUT_DIR / stem / f"{stem}.md"
         out_asset = OUTPUT_DIR / stem / "assets"
         try:
-            md_path, by_page = converter.convert(
-                docx, out_md, asset_dir=out_asset
-            )
+            md_path, _ = converter.convert(docx, out_md, asset_dir=out_asset)
             print(f"✅ {docx.name} -> {md_path}", file=sys.stderr)
             results.append(
                 {
                     "source": docx.name,
                     "md_path": str(md_path),
-                    "by_page": by_page,
                 }
             )
         except Exception as exc:  # noqa: BLE001
             print(f"❌ {docx.name} failed: {exc}", file=sys.stderr)
             results.append({"source": docx.name, "error": str(exc)})
-
-    # Machine-readable summary on stdout
-    print(json.dumps(results, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":
