@@ -78,16 +78,22 @@ def render(
         for ct in tables:
             lines.append(f"### {ct.currency}")
             lines.append("")
-            lines.append("| Date | Bank | Account | Description | Withdrawal | Deposit | Balance |")
+            lines.append("| Date | Bank | Account | Description | Withdrawal | Deposit | Net Deposit |")
             lines.append("| --- | --- | --- | --- | ---: | ---: | ---: |")
             for r in ct.rows:
+                # Skip zero-amount transactions (no withdrawal and no deposit).
+                if not (r.withdrawal or 0) and not (r.deposit or 0):
+                    continue
                 acct = mask_id(r.account, do_mask=do_mask)
                 desc = mask_desc(r.description, do_mask=do_mask) if do_mask else r.description
                 wd = f"{r.withdrawal:,.2f}" if r.withdrawal is not None else ""
                 dp = f"{r.deposit:,.2f}" if r.deposit is not None else ""
-                bal = _money(r.balance_after)  # currency omitted; table is grouped by currency (### header)
+                # Net Deposits: running net (deposit - withdrawal) within the currency table.
+                # The per-account balance_after is meaningless once rows from multiple
+                # accounts are interleaved, so the consolidated view uses this instead.
+                netd = _money(r.net_deposits)  # currency omitted; table is grouped by currency (### header)
                 lines.append(
-                    f"| {r.date} | {r.bank} | {acct} | {desc} | {wd} | {dp} | {bal} |"
+                    f"| {r.date} | {r.bank} | {acct} | {desc} | {wd} | {dp} | {netd} |"
                 )
             lines.append(
                 f"| | | | **Total** | {ct.total_withdrawal:,.2f} | "+
@@ -142,6 +148,8 @@ def render(
                 lines.append("| Date | Description | Withdrawal | Deposit | Balance |")
                 lines.append("| --- | --- | ---: | ---: | ---: |")
                 for t in acc.transactions:
+                    if t.amount == 0:
+                        continue  # skip zero-amount transactions
                     desc = mask_desc(t.description, do_mask=do_mask) if do_mask else t.description
                     if t.amount < 0:
                         wd, dp = _money(abs(t.amount), t.currency), ""

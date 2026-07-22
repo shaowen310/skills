@@ -35,8 +35,9 @@ class TxnRow:
     withdrawal: float | None
     deposit: float | None
     balance_after: float | None
-    txn_id: str
-    currency: str
+    net_deposits: float | None = None  # running net (deposit - withdrawal) within a currency table
+    txn_id: str = ""
+    currency: str = ""
 
 
 @dataclass
@@ -112,6 +113,13 @@ def build_render_model(stmt: Any) -> RenderModel:
 
     for ct in by_type_ccy.values():
         ct.rows.sort(key=lambda r: (r.date, r.txn_id))
+        # Running net deposits (deposit - withdrawal) across the currency table.
+        # The per-account balance_after is meaningless once rows from multiple
+        # accounts are interleaved, so the consolidated view uses this instead.
+        running = 0.0
+        for r in ct.rows:
+            running += (r.deposit or 0.0) - (r.withdrawal or 0.0)
+            r.net_deposits = running
 
     txn_tables_by_type: dict[str, list[CurrencyTable]] = {}
     for (atype, _ccy), ct in by_type_ccy.items():
