@@ -82,9 +82,7 @@ _NET_POSITION_TYPES: list[tuple[str, str]] = [
     ("current", "Current Accounts"),
     ("fixed_deposit", "Fixed Deposits"),
     ("srs", "SRS"),
-    ("credit_card", "Credit Cards"),
     ("ewallet", "E-wallets"),
-    ("unit_trust", "Unit Trusts"),
     ("unknown", "Other Accounts"),
 ]
 
