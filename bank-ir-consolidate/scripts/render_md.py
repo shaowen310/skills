@@ -77,6 +77,19 @@ def _sgd_equiv(balance: float, currency: str, fx_rates: dict[str, float]) -> flo
     return balance * rate
 
 
+def _parse_money(v: str | None) -> float | None:
+    """Parse a money string (commas/spaces) to float; dashes/blank -> None."""
+    if v is None:
+        return None
+    s = str(v).strip().replace(",", "")
+    if s in ("", "—", "-", "n/a", "N/A"):
+        return None
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
 # Net Position display types: (account_type, section_heading) in display order.
 _NET_POSITION_TYPES: list[tuple[str, str]] = [
     ("current", "Current Accounts"),
@@ -235,10 +248,53 @@ def _render_net_position(model: Any, mask_id: Any, do_mask: bool, fx_result: FXR
 
         grand_total_sgd += type_total_sgd
 
-    # Grand total line.
+    # --- Consolidated investment holdings ---
+    inv_rows: list[tuple[str, Any]] = []
+    for a in model.accounts:
+        inst = _account_institution(a)
+        for h in a.investment_holdings or []:
+            inv_rows.append((inst, h))
+
+    inv_total_sgd = 0.0
+    if inv_rows:
+        lines.append("### Investments")
+        lines.append("")
+        lines.append(
+            "| Bank | Name | Units | Currency | Unit Price | Valuation | "
+            "Cost | Unrealised P/L | Valuation (SGD) |"
+        )
+        lines.append(
+            "| --- | --- | ---: | --- | --- | --- | --- | --- | ---: |"
+        )
+        for inst, h in inv_rows:
+            val_raw = _parse_money(h.valuation)
+            val_sgd = ""
+            if val_raw is not None and h.currency:
+                rate = model.fx_rates.get(h.currency)
+                if rate is not None:
+                    val_sgd = f"{val_raw * rate:,.2f}"
+                    inv_total_sgd += val_raw * rate
+            lines.append(
+                f"| {inst} | {h.name} | {h.units or '—'} | {h.currency or '—'} | "
+                f"{h.unit_price or '—'} | {h.valuation or '—'} | {h.cost or '—'} | "
+                f"{h.unrealised_pl or '—'} | {val_sgd or '—'} |"
+            )
+        lines.append(
+            f"| | | | | | | | **Subtotal (SGD)** | **{inv_total_sgd:,.2f}** |"
+        )
+        lines.append("")
+
+    # Grand total: two subtotals (accounts + investments), then combined.
     lines.append("### Grand Total")
     lines.append("")
-    lines.append(f"**{grand_total_sgd:,.2f} SGD**")
+    lines.append("| | SGD |")
+    lines.append("| --- | ---: |")
+    lines.append(f"| Accounts (cash & deposits) | {grand_total_sgd:,.2f} |")
+    if inv_total_sgd:
+        lines.append(f"| Investments | {inv_total_sgd:,.2f} |")
+    lines.append(
+        f"| **Total Net Position** | **{grand_total_sgd + inv_total_sgd:,.2f}** |"
+    )
     lines.append("")
 
     return lines
