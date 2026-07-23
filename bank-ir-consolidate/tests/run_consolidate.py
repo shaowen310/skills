@@ -12,6 +12,7 @@ be exercised as a test.
 Usage:
     python tests/run_consolidate.py
     python tests/run_consolidate.py --cache tests/cache --out tests/outputs/consolidated.ir.json
+    python tests/run_consolidate.py --no-render-model  # skip the RenderModel export
 """
 from __future__ import annotations
 
@@ -31,6 +32,7 @@ from consolidate import (  # noqa: E402  # pyright: ignore[reportMissingImports]
 from _parser_loader import load_parser_modules  # noqa: E402  # pyright: ignore[reportMissingImports]
 from render_md import render as render_md  # noqa: E402  # pyright: ignore[reportMissingImports]
 from render_model import build_render_model  # noqa: E402  # pyright: ignore[reportMissingImports]
+from render_model_io import save_render_model  # noqa: E402  # pyright: ignore[reportMissingImports]
 from fx_rates import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     collect_currencies,
     get_fx_rates,
@@ -40,6 +42,7 @@ from fx_rates import (  # noqa: E402  # pyright: ignore[reportMissingImports]
 DEFAULT_CACHE = HERE / "cache"
 DEFAULT_OUTPUT = HERE / "outputs" / "consolidated.ir.json"
 DEFAULT_OUTPUT_MD = HERE / "outputs" / "consolidated.md"
+DEFAULT_OUTPUT_RM = HERE / "outputs" / "consolidated.render-model.json"
 
 
 def collect_inputs(cache_dir: Path) -> list[str]:
@@ -57,6 +60,8 @@ def main() -> None:
     _ = ap.add_argument("--cache", default=str(DEFAULT_CACHE), help="Directory of input *.ir.json files")
     _ = ap.add_argument("--out", default=str(DEFAULT_OUTPUT), help="Output consolidated IR JSON path")
     _ = ap.add_argument("--out-md", default=str(DEFAULT_OUTPUT_MD), help="Output consolidated markdown path")
+    _ = ap.add_argument("--out-render-model", default=str(DEFAULT_OUTPUT_RM), help="Output RenderModel JSON path")
+    _ = ap.add_argument("--no-render-model", action="store_true", help="Skip RenderModel export")
     _ = ap.add_argument("--parser-dir", default=None, help="Path to sg-bank-to-md skill dir")
     _ = ap.add_argument("--min-ir-version", default=DEFAULT_MIN_IR_VERSION, help="Minimum accepted ir_version")
     _ = ap.add_argument("--no-dedup", action="store_true", help="Disable txn_id de-duplication")
@@ -129,8 +134,9 @@ def main() -> None:
     _ = out.write_text(consolidated.to_json(indent=args.indent), encoding="utf-8")
 
     # Render the consolidated IR to a human-readable markdown summary.
+    render_model = build_render_model(consolidated, fx_rates=fx.rates)
     md = render_md(
-        build_render_model(consolidated, fx_rates=fx.rates),
+        render_model,
         pm.helpers,
         pm.common,
         do_mask=not args.no_mask,
@@ -140,9 +146,17 @@ def main() -> None:
     out_md.parent.mkdir(parents=True, exist_ok=True)
     _ = out_md.write_text(md, encoding="utf-8")
 
+    # Export the RenderModel for downstream tools.
+    out_rm = Path(args.out_render_model)
+    if not args.no_render_model:
+        out_rm.parent.mkdir(parents=True, exist_ok=True)
+        save_render_model(render_model.to_dict(), out_rm, indent=args.indent)
+
     total_out = total_in - deduped
     print(f"Consolidated {len(inputs)} input file(s) -> {out}")
     print(f"Rendered markdown summary -> {out_md}")
+    if not args.no_render_model:
+        print(f"Exported RenderModel -> {out_rm}")
     print(f"FX: {fx.source} (as_of {fx.as_of}, {fx.provider})")
     for p in inputs:
         print(f"  + {Path(p).name}")
