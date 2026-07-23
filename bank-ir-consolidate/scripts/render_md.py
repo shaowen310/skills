@@ -332,8 +332,8 @@ def render(
         for ct in tables:
             lines.append(f"### {ct.currency}")
             lines.append("")
-            lines.append("| Date | Bank | Account | Description | Category | Withdrawal | Deposit | Running Net |")
-            lines.append("| --- | --- | --- | --- | --- | ---: | ---: | ---: |")
+            lines.append("| Date | Bank | Account | Description | Withdrawal | Deposit | Running Net |")
+            lines.append("| --- | --- | --- | --- | ---: | ---: | ---: |")
             for r in ct.rows:
                 acct = mask_id(r.account, do_mask=do_mask)
                 desc = mask_desc(r.description, do_mask=do_mask) if do_mask else r.description
@@ -343,9 +343,8 @@ def render(
                 # The per-account balance_after is meaningless once rows from multiple
                 # accounts are interleaved, so the consolidated view uses this instead.
                 netd = _money(r.net_deposits)  # currency omitted; table is grouped by currency (### header)
-                cat = r.category or "—"
                 lines.append(
-                    f"| {r.date} | {r.bank} | {acct} | {desc} | {cat} | {wd} | {dp} | {netd} |"
+                    f"| {r.date} | {r.bank} | {acct} | {desc} | {wd} | {dp} | {netd} |"
                 )
             lines.append(
                 f"| | | | **Total** | | {ct.total_withdrawal:,.2f} | "+
