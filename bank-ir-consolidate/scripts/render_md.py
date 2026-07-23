@@ -276,7 +276,7 @@ def render(
         for ct in tables:
             lines.append(f"### {ct.currency}")
             lines.append("")
-            lines.append("| Date | Bank | Account | Description | Withdrawal | Deposit | Net Deposit |")
+            lines.append("| Date | Bank | Account | Description | Withdrawal | Deposit | Running Net |")
             lines.append("| --- | --- | --- | --- | ---: | ---: | ---: |")
             for r in ct.rows:
                 # Skip zero-amount transactions (no withdrawal and no deposit).
@@ -286,7 +286,7 @@ def render(
                 desc = mask_desc(r.description, do_mask=do_mask) if do_mask else r.description
                 wd = f"{r.withdrawal:,.2f}" if r.withdrawal is not None else ""
                 dp = f"{r.deposit:,.2f}" if r.deposit is not None else ""
-                # Net Deposits: running net (deposit - withdrawal) within the currency table.
+                # Running Net: running net (deposit - withdrawal) within the currency table.
                 # The per-account balance_after is meaningless once rows from multiple
                 # accounts are interleaved, so the consolidated view uses this instead.
                 netd = _money(r.net_deposits)  # currency omitted; table is grouped by currency (### header)
@@ -341,8 +341,16 @@ def render(
             lines.append("")
 
             if acc.transactions:
-                lines.append("| Date | Description | Withdrawal | Deposit | Balance |")
+                # Credit cards use a running "Running Net" (deposit - withdrawal),
+                # matching the consolidated Credit Card Transactions section,
+                # instead of the per-account balance_after.
+                is_cc = acc.account_type == "credit_card"
+                if is_cc:
+                    lines.append("| Date | Description | Withdrawal | Deposit | Running Net |")
+                else:
+                    lines.append("| Date | Description | Withdrawal | Deposit | Balance |")
                 lines.append("| --- | --- | ---: | ---: | ---: |")
+                cc_running: dict[str, float] = {}
                 for t in acc.transactions:
                     if t.amount == 0:
                         continue  # skip zero-amount transactions
@@ -352,12 +360,20 @@ def render(
                     desc = mask_desc(t.description, do_mask=do_mask) if do_mask else t.description
                     if t.amount < 0:
                         wd, dp = _money(abs(t.amount), t.currency), ""
+                        cc_running[t.currency] = cc_running.get(t.currency, 0.0) - abs(t.amount)
                     else:
                         wd, dp = "", _money(t.amount, t.currency)
-                    lines.append(
-                        f"| {t.posted_date} | {desc} | {wd} | {dp} | "+
-                        f"{_money(t.balance_after, t.currency)} |"
-                    )
+                        cc_running[t.currency] = cc_running.get(t.currency, 0.0) + t.amount
+                    if is_cc:
+                        last = _money(cc_running.get(t.currency, 0.0), t.currency)
+                        lines.append(
+                            f"| {t.posted_date} | {desc} | {wd} | {dp} | {last} |"
+                        )
+                    else:
+                        lines.append(
+                            f"| {t.posted_date} | {desc} | {wd} | {dp} | "+
+                            f"{_money(t.balance_after, t.currency)} |"
+                        )
                 lines.append("")
 
             if acc.fd_records:
