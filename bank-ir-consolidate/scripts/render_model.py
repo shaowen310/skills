@@ -13,7 +13,7 @@ section. Override by passing a custom ``fx_rates`` dict on construction.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 # FX rates — SGD per 1 unit of foreign currency, mid-market as of period_to
@@ -53,6 +53,25 @@ class TxnRow:
     net_deposits: float | None = None  # running net (deposit - withdrawal) within a currency table
     txn_id: str = ""
     currency: str = ""
+    category: str = ""      # set from txn.extras["category"] when present (merge-back)
+
+    def to_dict(self) -> dict[str, Any]:
+        d: dict[str, Any] = {
+            "date": self.date,
+            "bank": self.bank,
+            "account": self.account,
+            "description": self.description,
+            "withdrawal": self.withdrawal,
+            "deposit": self.deposit,
+            "balance_after": self.balance_after,
+            "txn_id": self.txn_id,
+            "currency": self.currency,
+        }
+        if self.net_deposits is not None:
+            d["net_deposits"] = self.net_deposits
+        if self.category:
+            d["category"] = self.category
+        return d
 
 
 @dataclass
@@ -68,6 +87,9 @@ class CurrencyTable:
     def total_deposit(self) -> float:
         return sum((r.deposit or 0.0) for r in self.rows)
 
+    def to_dict(self) -> dict[str, Any]:
+        return {"currency": self.currency, "rows": [r.to_dict() for r in self.rows]}
+
 
 @dataclass
 class RenderModel:
@@ -82,6 +104,42 @@ class RenderModel:
     txn_tables_by_type: dict[str, list[CurrencyTable]]
     accounts: list[Any]      # original accounts, for the per-bank drill-down
     warnings: list[str]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize to the de-identified interchange JSON for categorizers.
+
+        ``accounts`` is **projected** (never the raw ``ir_schema.Account``): only
+        ``account_no``, ``account_type``, ``currency``, ``balance``, ``fd_records``
+        and ``investment_holdings`` are emitted — ``account_holder`` PII is dropped.
+        Raw ``account_no`` / ``deposit_no`` are intentionally kept so a separate
+        project can match inter-bank transfers by destination account number.
+        """
+        accounts = [
+            {
+                "account_no": a.account_no,
+                "account_type": a.account_type,
+                "currency": a.currency,
+                "balance": a.balance,
+                "fd_records": [
+                    {"deposit_no": fd.deposit_no} for fd in (a.fd_records or [])
+                ],
+                "investment_holdings": [
+                    asdict(h) for h in (a.investment_holdings or [])
+                ],
+            }
+            for a in self.accounts
+        ]
+        return {
+            "ir_version": self.ir_version,
+            "institutions": self.institutions,
+            "period_from": self.period_from,
+            "period_to": self.period_to,
+            "txn_tables_by_type": {
+                atype: [ct.to_dict() for ct in tables]
+                for atype, tables in self.txn_tables_by_type.items()
+            },
+            "accounts": accounts,
+        }
 
 
 def _account_institution(acc: Any) -> str:
@@ -143,6 +201,7 @@ def build_render_model(stmt: Any, fx_rates: dict[str, float] | None = None) -> R
                     balance_after=t.balance_after,
                     txn_id=t.txn_id,
                     currency=t.currency,
+                    category=(t.extras or {}).get("category", "") if t.extras else "",
                 )
             )
 
@@ -174,4 +233,51 @@ def build_render_model(stmt: Any, fx_rates: dict[str, float] | None = None) -> R
         txn_tables_by_type=txn_tables_by_type,
         accounts=stmt.accounts,
         warnings=stmt.warnings,
+    )
+
+
+def render_model_from_dict(d: dict[str, Any]) -> "RenderModel":
+    """Inverse of :meth:`RenderModel.to_dict`.
+
+    Used by Python-side consumers (tests, validators) that load the de-identified
+    export and want a typed ``RenderModel`` back. ``accounts`` arrive already
+    projected, so they are kept as plain dicts.
+    """
+    def _row(rd: dict[str, Any]) -> TxnRow:
+        return TxnRow(
+            date=rd.get("date", ""),
+            bank=rd.get("bank", ""),
+            account=rd.get("account", ""),
+            description=rd.get("description", ""),
+            withdrawal=rd.get("withdrawal"),
+            deposit=rd.get("deposit"),
+            balance_after=rd.get("balance_after"),
+            net_deposits=rd.get("net_deposits"),
+            txn_id=rd.get("txn_id", ""),
+            currency=rd.get("currency", ""),
+            category=rd.get("category", ""),
+        )
+
+    txn_tables_by_type = {
+        atype: [
+            CurrencyTable(
+                currency=ct.get("currency", ""),
+                rows=[_row(r) for r in ct.get("rows", [])],
+            )
+            for ct in tables
+        ]
+        for atype, tables in d.get("txn_tables_by_type", {}).items()
+    }
+    return RenderModel(
+        ir_version=d.get("ir_version", ""),
+        sources=d.get("sources", []),
+        institutions=d.get("institutions", []),
+        period_from=d.get("period_from"),
+        period_to=d.get("period_to"),
+        net_sgd=d.get("net_sgd", 0.0),
+        per_ccy_balances=d.get("per_ccy_balances", {}),
+        fx_rates=d.get("fx_rates", {}),
+        txn_tables_by_type=txn_tables_by_type,
+        accounts=d.get("accounts", []),
+        warnings=d.get("warnings", []),
     )
