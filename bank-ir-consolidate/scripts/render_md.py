@@ -21,6 +21,12 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _parser_loader import load_parser_modules  # noqa: E402
 from render_model import build_render_model, TXN_SECTION_ORDER  # noqa: E402
+from fx_rates import (  # noqa: E402
+    FXResult,
+    collect_currencies,
+    get_fx_rates,
+    get_provider,
+)
 
 
 def _money(v: float | None, currency: str = "") -> str:
@@ -82,11 +88,41 @@ _NET_POSITION_TYPES: list[tuple[str, str]] = [
     ("unknown", "Other Accounts"),
 ]
 
-# FX rate display order (for the FX rate table).
+# FX rate display order (for the FX rate table). SGD first, then the usual
+# watch-list, then any extra currencies discovered in the statement.
 _FX_RATE_CCY_ORDER: list[str] = ["SGD", "USD", "JPY", "CNY"]
 
 
-def _render_net_position(model: Any, mask_id: Any, do_mask: bool) -> list[str]:
+def _fx_note(fx_result: FXResult | None) -> str:
+    """Build the provenance note line for the FX rate table."""
+    if fx_result is None:
+        return (
+            "*Mid-market rates (source unknown). "
+            "SGD per 1 unit of foreign currency.*"
+        )
+    src = fx_result.source
+    label = {
+        "live": "live (fetched)",
+        "cached": "cached",
+        "fallback": "fallback (hardcoded default)",
+        "none": "n/a",
+    }.get(src, src)
+    parts = [f"*Mid-market rates (**{label}**, provider: {fx_result.provider})"]
+    if fx_result.as_of:
+        parts.append(f"as of {fx_result.as_of}")
+    if fx_result.fetched_at:
+        parts.append(f"fetched at {fx_result.fetched_at}")
+    parts.append("SGD per 1 unit of foreign currency.*")
+    note = " ".join(parts)
+    if fx_result.missing:
+        note += (
+            f"\n\n_Missing rates (used hardcoded fallback for these): "
+            f"{', '.join(fx_result.missing)}._"
+        )
+    return note
+
+
+def _render_net_position(model: Any, mask_id: Any, do_mask: bool, fx_result: FXResult | None = None) -> list[str]:
     lines: list[str] = []
     lines.append("## Net Position")
     lines.append("")
@@ -94,16 +130,21 @@ def _render_net_position(model: Any, mask_id: Any, do_mask: bool) -> list[str]:
     period_to = model.period_to or "—"
     lines.append(f"### FX Rate Table (as of {period_to})")
     lines.append("")
-    lines.append(
-        "*Mid-market rates from ValutaFX (last business day before "
-        + f"{period_to} if it falls on a weekend). "
-        + "SGD per 1 unit of foreign currency.*"
-    )
+    lines.append(_fx_note(fx_result))
     lines.append("")
     lines.append("| Currency | Mid-market (1 SGD =) | SGD per 1 unit |")
     lines.append("| --- | --- | ---: |")
-    # Look up inverse rates (1 SGD = X CCY) from the model's fx_rates.
+    # Display order: SGD, then the usual watch-list (if present), then any extra
+    # currencies discovered in the statement — all driven by the live/cached rates.
+    order: list[str] = ["SGD"]
     for ccy in _FX_RATE_CCY_ORDER:
+        if ccy != "SGD" and ccy in model.fx_rates and ccy not in order:
+            order.append(ccy)
+    for ccy in sorted(model.fx_rates):
+        if ccy != "SGD" and ccy not in order:
+            order.append(ccy)
+    # Look up inverse rates (1 SGD = X CCY) from the model's fx_rates.
+    for ccy in order:
         rate = model.fx_rates.get(ccy)
         if rate is None or ccy == "SGD":
             inv = "—"
@@ -197,7 +238,7 @@ def _render_net_position(model: Any, mask_id: Any, do_mask: bool) -> list[str]:
         grand_total_sgd += type_total_sgd
 
     # Grand total line.
-    lines.append(f"### Grand Total")
+    lines.append("### Grand Total")
     lines.append("")
     lines.append(f"**{grand_total_sgd:,.2f} SGD**")
     lines.append("")
@@ -210,6 +251,7 @@ def render(
     helpers: types.ModuleType,
     common: types.ModuleType,
     do_mask: bool,
+    fx_result: FXResult | None = None,
 ) -> str:
     mask_desc = helpers.md_masked_description
     mask_id = common.mask_id
@@ -227,7 +269,7 @@ def render(
     lines.append("")
 
     # --- Net Position (from model) ---
-    lines.extend(_render_net_position(model, mask_id, do_mask))
+    lines.extend(_render_net_position(model, mask_id, do_mask, fx_result=fx_result))
 
     # --- Combined transactions: one section per account type, one table per currency ---
     def _render_ccy_section(tables: list[Any], heading: str) -> None:
@@ -373,15 +415,85 @@ def main() -> None:
     _ = ap.add_argument("-o", "--out", default="consolidated.md", help="Output markdown path")
     _ = ap.add_argument("--parser-dir", default=None, help="Path to sg-bank-to-md skill dir")
     _ = ap.add_argument("--no-mask", action="store_true", help="Disable masking of IDs/names")
+    # FX retrieval / caching options.
+    _ = ap.add_argument(
+        "--fx-date", default=None,
+        help="FX as-of date (YYYY-MM-DD). Default: statement period_to, else today.",
+    )
+    _ = ap.add_argument(
+        "--fx-cache-dir", default=None,
+        help="FX cache directory. Default: bank-ir-consolidate/cache/.",
+    )
+    _ = ap.add_argument(
+        "--fx-provider", default="frankfurter",
+        help="FX provider name (pluggable). Default: frankfurter.",
+    )
+    _ = ap.add_argument(
+        "--fx-offline", action="store_true",
+        help="Never fetch live; use only the cache, then hardcoded fallback rates.",
+    )
+    _ = ap.add_argument(
+        "--fx-force-refresh", action="store_true",
+        help="Ignore the cache and re-fetch live rates.",
+    )
+    _ = ap.add_argument(
+        "--fx-no-embed", action="store_true",
+        help="Do not embed FX provenance into extras.consolidation.fx of the IR.",
+    )
+    _ = ap.add_argument(
+        "--fx-embed-ir", default=None,
+        help="Path to write the IR with embedded FX provenance. Default: the input IR path.",
+    )
     args = ap.parse_args()
 
     pm = load_parser_modules(args.parser_dir)
     text = Path(args.input).read_text(encoding="utf-8")
     stmt = pm.ir_schema.from_json(text)
-    md = render(build_render_model(stmt), pm.helpers, pm.common, do_mask=not args.no_mask)
+
+    # Resolve FX rates on demand: union of the default watch-list and every
+    # non-SGD currency actually present in the statement's accounts.
+    as_of = args.fx_date or (stmt.statement_meta.period_to if stmt.statement_meta else None)
+    currencies = collect_currencies(stmt)
+    fx = get_fx_rates(
+        as_of=as_of,
+        symbols=currencies,
+        provider=get_provider(args.fx_provider),
+        cache_dir=args.fx_cache_dir,
+        offline=args.fx_offline,
+        force_refresh=args.fx_force_refresh,
+    )
+
+    md = render(
+        build_render_model(stmt, fx_rates=fx.rates),
+        pm.helpers,
+        pm.common,
+        do_mask=not args.no_mask,
+        fx_result=fx,
+    )
     out = Path(args.out)
     _ = out.write_text(md, encoding="utf-8")
-    print(f"Wrote {out}")
+    print(f"Wrote {out} (FX: {fx.source}, as_of {fx.as_of}, {fx.provider})")
+
+    # Embed FX provenance into the consolidated IR for full reproducibility.
+    if not args.fx_no_embed:
+        embed_path = Path(args.fx_embed_ir) if args.fx_embed_ir else Path(args.input)
+        extras = dict(stmt.extras or {})
+        cons = dict(extras.get("consolidation", {}) or {})
+        cons["fx"] = {
+            "provider": fx.provider,
+            "source": fx.source,
+            "base": "SGD",
+            "requested_as_of": as_of,
+            "as_of": fx.as_of,
+            "fetched_at": fx.fetched_at,
+            "rates_sgd_per_unit": fx.rates,
+            "symbols_requested": fx.symbols_requested,
+            "missing": fx.missing,
+        }
+        extras["consolidation"] = cons
+        stmt.extras = extras
+        _ = embed_path.write_text(stmt.to_json(indent=2), encoding="utf-8")
+        print(f"Embedded FX provenance into {embed_path}")
 
 
 if __name__ == "__main__":

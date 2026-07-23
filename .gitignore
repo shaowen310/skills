@@ -157,5 +157,8 @@ htmlcov/
 **/tests/outputs/
 **/tests/cache/
 
+# FX rate cache (bank-ir-consolidate)
+bank-ir-consolidate/cache/
+
 # Plans
 .plan/

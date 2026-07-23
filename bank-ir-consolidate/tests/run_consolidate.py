@@ -31,6 +31,11 @@ from consolidate import (  # noqa: E402  # pyright: ignore[reportMissingImports]
 from _parser_loader import load_parser_modules  # noqa: E402  # pyright: ignore[reportMissingImports]
 from render_md import render as render_md  # noqa: E402  # pyright: ignore[reportMissingImports]
 from render_model import build_render_model  # noqa: E402  # pyright: ignore[reportMissingImports]
+from fx_rates import (  # noqa: E402  # pyright: ignore[reportMissingImports]
+    collect_currencies,
+    get_fx_rates,
+    get_provider,
+)
 
 DEFAULT_CACHE = HERE / "cache"
 DEFAULT_OUTPUT = HERE / "outputs" / "consolidated.ir.json"
@@ -57,6 +62,12 @@ def main() -> None:
     _ = ap.add_argument("--no-dedup", action="store_true", help="Disable txn_id de-duplication")
     _ = ap.add_argument("--no-mask", action="store_true", help="Disable masking of IDs/names in markdown")
     _ = ap.add_argument("--indent", type=int, default=2, help="JSON indent")
+    # FX retrieval / caching options (forwarded to fx_rates).
+    _ = ap.add_argument("--fx-date", default=None, help="FX as-of date (YYYY-MM-DD)")
+    _ = ap.add_argument("--fx-cache-dir", default=None, help="FX cache directory")
+    _ = ap.add_argument("--fx-provider", default="frankfurter", help="FX provider name")
+    _ = ap.add_argument("--fx-offline", action="store_true", help="Use only FX cache/fallback")
+    _ = ap.add_argument("--fx-force-refresh", action="store_true", help="Re-fetch FX live")
     args = ap.parse_args()
 
     inputs = collect_inputs(Path(args.cache))
@@ -85,12 +96,46 @@ def main() -> None:
         stmts_with_paths, ir, do_dedup=not args.no_dedup  # type: ignore[arg-type]
     )
 
+    # Resolve FX rates on demand and embed provenance into the consolidated IR.
+    as_of = args.fx_date or (
+        consolidated.statement_meta.period_to if consolidated.statement_meta else None
+    )
+    fx = get_fx_rates(
+        as_of=as_of,
+        symbols=collect_currencies(consolidated),
+        provider=get_provider(args.fx_provider),
+        cache_dir=args.fx_cache_dir,
+        offline=args.fx_offline,
+        force_refresh=args.fx_force_refresh,
+    )
+    extras = dict(consolidated.extras or {})
+    cons = dict(extras.get("consolidation", {}) or {})
+    cons["fx"] = {
+        "provider": fx.provider,
+        "source": fx.source,
+        "base": "SGD",
+        "requested_as_of": as_of,
+        "as_of": fx.as_of,
+        "fetched_at": fx.fetched_at,
+        "rates_sgd_per_unit": fx.rates,
+        "symbols_requested": fx.symbols_requested,
+        "missing": fx.missing,
+    }
+    extras["consolidation"] = cons
+    consolidated.extras = extras
+
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     _ = out.write_text(consolidated.to_json(indent=args.indent), encoding="utf-8")
 
     # Render the consolidated IR to a human-readable markdown summary.
-    md = render_md(build_render_model(consolidated), pm.helpers, pm.common, do_mask=not args.no_mask)
+    md = render_md(
+        build_render_model(consolidated, fx_rates=fx.rates),
+        pm.helpers,
+        pm.common,
+        do_mask=not args.no_mask,
+        fx_result=fx,
+    )
     out_md = Path(args.out_md)
     out_md.parent.mkdir(parents=True, exist_ok=True)
     _ = out_md.write_text(md, encoding="utf-8")
@@ -98,6 +143,7 @@ def main() -> None:
     total_out = total_in - deduped
     print(f"Consolidated {len(inputs)} input file(s) -> {out}")
     print(f"Rendered markdown summary -> {out_md}")
+    print(f"FX: {fx.source} (as_of {fx.as_of}, {fx.provider})")
     for p in inputs:
         print(f"  + {Path(p).name}")
     print(
