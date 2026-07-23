@@ -105,7 +105,7 @@ def consolidate_statements(
     stmts_with_paths: list[tuple[str, Any]],
     ir: types.ModuleType,
     do_dedup: bool,
-) -> tuple[Any, int, int]:
+) -> tuple[Any, int, int, int]:
     """``stmts_with_paths`` is a list of (path, ParsedStatement)."""
     groups: dict[tuple[str, str, str], list[Any]] = {}
     sources: list[dict[str, Any]] = []
@@ -131,12 +131,17 @@ def consolidate_statements(
 
     merged_accounts = []
     deduped = 0
+    filtered = 0
     for (_inst, _no, _name), accs in groups.items():
         base = accs[0]
         txns = []
         seen: set[str] = set()
         for acc in accs:
             for t in acc.transactions:
+                # Drop transactions with no description AND zero amount.
+                if (not (t.description or "").strip()) and t.amount == 0:
+                    filtered += 1
+                    continue
                 if do_dedup and t.txn_id:
                     if t.txn_id in seen:
                         deduped += 1
@@ -221,11 +226,12 @@ def consolidate_statements(
             "consolidation": {
                 "sources": sources,
                 "deduped": deduped,
+                "filtered": filtered,
                 "n_inputs": len(stmts_with_paths),
             }
         },
     )
-    return consolidated, total_txns_in, deduped
+    return consolidated, total_txns_in, deduped, filtered
 
 
 def main() -> None:
@@ -255,16 +261,16 @@ def main() -> None:
             )
         stmts_with_paths.append((str(path), stmt))
 
-    consolidated, total_in, deduped = consolidate_statements(
+    consolidated, total_in, deduped, filtered = consolidate_statements(
         stmts_with_paths, ir, do_dedup=not args.no_dedup
     )
     out = Path(args.out)
     _ = out.write_text(consolidated.to_json(indent=args.indent), encoding="utf-8")
-    total_out = total_in - deduped
+    total_out = total_in - deduped - filtered
     print(f"Wrote {out}")
     print(
         f"  inputs={len(stmts_with_paths)} accounts={len(consolidated.accounts)} "+
-        f"txns_in={total_in} txns_out={total_out} deduped={deduped}"
+        f"txns_in={total_in} txns_out={total_out} deduped={deduped} filtered={filtered}"
     )
 
 

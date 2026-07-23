@@ -335,9 +335,6 @@ def render(
             lines.append("| Date | Bank | Account | Description | Category | Withdrawal | Deposit | Running Net |")
             lines.append("| --- | --- | --- | --- | --- | ---: | ---: | ---: |")
             for r in ct.rows:
-                # Skip zero-amount transactions (no withdrawal and no deposit).
-                if not (r.withdrawal or 0) and not (r.deposit or 0):
-                    continue
                 acct = mask_id(r.account, do_mask=do_mask)
                 desc = mask_desc(r.description, do_mask=do_mask) if do_mask else r.description
                 wd = f"{r.withdrawal:,.2f}" if r.withdrawal is not None else ""
@@ -409,8 +406,6 @@ def render(
                 lines.append("| --- | --- | ---: | ---: | ---: |")
                 cc_running: dict[str, float] = {}
                 for t in acc.transactions:
-                    if t.amount == 0:
-                        continue  # skip zero-amount transactions
                     # Skip internal "PAYMENT BY INTERNET" lines (negative amount).
                     if t.amount < 0 and "PAYMENT BY INTERNET" in (t.description or "").upper():
                         continue

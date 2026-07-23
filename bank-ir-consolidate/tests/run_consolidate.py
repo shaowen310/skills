@@ -97,7 +97,7 @@ def main() -> None:
             sys.exit(f"[error] {path}: ir_version {stmt.ir_version!r} < required {args.min_ir_version!r}")
         stmts_with_paths.append((str(path), stmt))
 
-    consolidated, total_in, deduped = consolidate_statements(
+    consolidated, total_in, deduped, filtered = consolidate_statements(
         stmts_with_paths, ir, do_dedup=not args.no_dedup  # type: ignore[arg-type]
     )
 
@@ -152,7 +152,7 @@ def main() -> None:
         out_rm.parent.mkdir(parents=True, exist_ok=True)
         save_render_model(render_model.to_dict(), out_rm, indent=args.indent)
 
-    total_out = total_in - deduped
+    total_out = total_in - deduped - filtered
     print(f"Consolidated {len(inputs)} input file(s) -> {out}")
     print(f"Rendered markdown summary -> {out_md}")
     if not args.no_render_model:
@@ -162,7 +162,7 @@ def main() -> None:
         print(f"  + {Path(p).name}")
     print(
         f"  inputs={len(stmts_with_paths)} accounts={len(consolidated.accounts)} "+
-        f"txns_in={total_in} txns_out={total_out} deduped={deduped}"
+        f"txns_in={total_in} txns_out={total_out} deduped={deduped} filtered={filtered}"
     )
 
 
