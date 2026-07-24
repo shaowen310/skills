@@ -47,14 +47,11 @@ def _get_balance(acc: Any) -> float:
     """Get the effective balance of an account.
 
     Falls back through:
-    1. ``acc.balance``
-    2. ``acc.closing_balance``
-    3. Last transaction's ``balance_after`` (common for OCBC accounts)
-    4. FD record principal (for OCBC TIME DEPOSITS-style accounts)
-    5. 0.0
+    1. ``acc.closing_balance``
+    2. Last transaction's ``balance_after`` (common for OCBC accounts)
+    3. FD record principal (for OCBC TIME DEPOSITS-style accounts)
+    4. 0.0
     """
-    if acc.balance is not None:
-        return acc.balance
     if acc.closing_balance is not None:
         return acc.closing_balance
     if acc.transactions:
@@ -389,8 +386,6 @@ def render(
                     f"- **Opening**: {_money(acc.opening_balance, acc.currency)}  "+
                     f"**Closing**: {_money(acc.closing_balance, acc.currency)}"
                 )
-            elif acc.balance is not None:
-                lines.append(f"- **Balance**: {_money(acc.balance, acc.currency)}")
             lines.append("")
 
             if acc.transactions:

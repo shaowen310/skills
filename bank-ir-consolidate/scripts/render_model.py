@@ -119,7 +119,7 @@ class RenderModel:
                 "account_no": a.account_no,
                 "account_type": a.account_type,
                 "currency": a.currency,
-                "balance": a.balance,
+                "balance": a.closing_balance,
                 "fd_records": [
                     {"deposit_no": fd.deposit_no} for fd in (a.fd_records or [])
                 ],
@@ -167,14 +167,14 @@ def build_render_model(stmt: Any, fx_rates: dict[str, float] | None = None) -> R
 
     net_sgd = 0.0
     for a in stmt.accounts:
-        if a.balance is not None and a.currency:
+        if a.closing_balance is not None and a.currency:
             rate = effective_fx.get(a.currency)
             if rate is not None:
-                net_sgd += a.balance * rate
+                net_sgd += a.closing_balance * rate
     per_ccy: dict[str, float] = {}
     for a in stmt.accounts:
-        if a.balance is not None and a.currency:
-            per_ccy[a.currency] = per_ccy.get(a.currency, 0.0) + a.balance
+        if a.closing_balance is not None and a.currency:
+            per_ccy[a.currency] = per_ccy.get(a.currency, 0.0) + a.closing_balance
 
     by_type_ccy: dict[tuple[str, str], CurrencyTable] = {}
     for acc in stmt.accounts:
