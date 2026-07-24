@@ -11,7 +11,7 @@ This script merges those categories back into the consolidated ``ParsedStatement
 1. For every transaction whose ``txn_id`` appears in the map, set
    ``txn.extras["category"] = category``.
 2. When the category indicates a transfer (case-insensitive, starts with
-   "transfer"), also flag ``txn.is_transfer = True`` and ensure the ``"transfer"``
+   "transfer"), also flag ``txn.is_internal_transfer = True`` and ensure the ``"transfer"``
    tag is present, so downstream rendering / netting agrees with the categorizer.
 3. Validate coverage. The export that the categorizer consumed only contains the
    transactions that ``build_render_model`` surfaces (FD legs / reversals are
@@ -143,7 +143,7 @@ def main() -> None:
                 txn.extras = {}
             txn.extras["category"] = cat
             if _is_transfer_category(cat):
-                txn.is_transfer = True
+                txn.is_internal_transfer = True
                 if "transfer" not in txn.tags:
                     txn.tags.append("transfer")
                 transfer_flagged += 1
