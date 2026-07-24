@@ -7,7 +7,7 @@ and writes a single consolidated ``ParsedStatement`` as ``consolidated.ir.json``
 
 Usage:
     python consolidate.py a.ir.json b.ir.json -o consolidated.ir.json
-    python consolidate.py *.ir.json -o consolidated.ir.json --min-ir-version 2026.3
+    python consolidate.py *.ir.json -o consolidated.ir.json --min-ir-version 2026.4
 """
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _parser_loader import load_parser_modules  # noqa: E402
 
 VERSION = "0.1.0"
-DEFAULT_MIN_IR_VERSION = "2026.3"
+DEFAULT_MIN_IR_VERSION = "2026.4"
 
 
 def _version_ge(a: str, b: str) -> bool:

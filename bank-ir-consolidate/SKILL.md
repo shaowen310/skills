@@ -29,7 +29,7 @@ cross-bank, multi-account, multi-currency markdown report.
      `(institution, account_no, name)` group (handles overlapping statement
      periods).
    - Carries forward the **minimum** `ir_version` and refuses IR older than
-     `2026.3` (the `from_json` gate).
+     `2026.4` (the `from_json` gate).
    - Stores provenance in `extras.consolidation.sources` (per-source file,
      parser, parsed_at, ir_version, institution, account/txn counts) plus the
      dedup count.
@@ -83,7 +83,7 @@ cross-bank, multi-account, multi-currency markdown report.
 The IR schema is defined publicly by `sg-bank-pdf-parser`:
 `references/ir.schema.json` (JSON Schema 2020-12) and
 `sg_bank_pdf_parser/ir_schema.py`. Downstream consumers must require
-`ir_version >= 2026.3`.
+`ir_version >= 2026.4`.
 
 ## Options
 

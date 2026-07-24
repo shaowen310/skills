@@ -158,7 +158,7 @@ Composite workflows that chain one or more basic skills.
 - **Description**: A downstream consumer of `sg-bank-pdf-parser`. Takes N `*.ir.json` (`ParsedStatement`) files — e.g. from DBS, OCBC, UOB, ICBC — and merges them into a single consolidated `ParsedStatement`, then renders a human-readable Markdown report. No PDF parsing required; it only needs the schema + masking helpers from `sg_bank_pdf_parser`.
 - **Features**:
   - **Consolidation** — groups accounts by `(institution, account_no, name)`, concatenates transactions across statements, and de-duplicates by `txn_id` (handles overlapping statement periods)
-  - **Version gate** — carries forward the minimum `ir_version` and refuses IR older than `2026.3` (enforced by `from_json`)
+  - **Version gate** — carries forward the minimum `ir_version` and refuses IR older than `2026.4` (enforced by `from_json`)
   - **Provenance** — records every source file, parser, period, and counts in `extras.consolidation.sources`; dedup count tracked
   - **Cross-bank Markdown** — Net Position (SGD-equivalent via FX rates, plus per-currency balances), per-bank/per-account transaction tables, Fixed Deposit and Investment holdings sections
   - **Consistent masking** — reuses `sg_bank_pdf_parser`'s masking helpers so account/deposit numbers and names stay masked, matching `sg-bank-pdf-parser` (disable with `--no-mask`)
