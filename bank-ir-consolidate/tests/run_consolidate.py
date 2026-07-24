@@ -62,7 +62,7 @@ def main() -> None:
     _ = ap.add_argument("--out-md", default=str(DEFAULT_OUTPUT_MD), help="Output consolidated markdown path")
     _ = ap.add_argument("--out-render-model", default=str(DEFAULT_OUTPUT_RM), help="Output RenderModel JSON path")
     _ = ap.add_argument("--render-model", action="store_true", help="Export RenderModel JSON")
-    _ = ap.add_argument("--parser-dir", default=None, help="Path to sg-bank-to-md skill dir")
+    _ = ap.add_argument("--parser-dir", default=None, help="Path to sg-bank-pdf-parser skill dir")
     _ = ap.add_argument("--min-ir-version", default=DEFAULT_MIN_IR_VERSION, help="Minimum accepted ir_version")
     _ = ap.add_argument("--no-dedup", action="store_true", help="Disable txn_id de-duplication")
     _ = ap.add_argument("--no-mask", action="store_true", help="Disable masking of IDs/names in markdown")

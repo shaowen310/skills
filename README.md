@@ -2,7 +2,7 @@
 
 A collection of reusable skills for AI coding assistants and agents. These skills extend the capabilities of AI agents by providing specialized knowledge, workflows, and executable scripts for specific domains.
 
-> **Note:** This repository uses a git submodule. Clone with `git clone --recurse-submodules` (or run `git submodule update --init` after cloning) so the `sg-bank-to-md` skill folder is populated.
+> **Note:** This repository uses a git submodule. Clone with `git clone --recurse-submodules` (or run `git submodule update --init` after cloning) so the `sg-bank-pdf-parser` skill folder is populated.
 
 ## 🎯 What Are Skills?
 
@@ -24,8 +24,8 @@ The full, detailed catalogue (features, use cases, triggers, and tech stack for 
 | [`kb-ingest`](./kb-ingest/SKILL.md) | Orchestrator | Thin orchestrator that turns `.pptx` slides into knowledge-base-ready JSONL chunks for RAG / agent pipelines |
 | [`meeting-minutes`](./meeting-minutes/SKILL.md) | Basic | Turn a meeting transcript plus a Markdown template into clean, structured meeting minutes |
 | [`meeting-minutes-export`](./meeting-minutes-export/SKILL.md) | Orchestrator | Orchestrator that runs meeting-minutes and exports the result to Word (.docx) |
-| [`bank-ir-consolidate`](./bank-ir-consolidate/SKILL.md) | Orchestrator | Consolidate multiple sg-bank-to-md IR JSON files into one and render a cross-bank, multi-currency Markdown summary |
-| [`sg-bank-to-md`](./sg-bank-to-md/SKILL.md) *(submodule → [`sg-bank-pdf-parser`](https://github.com/shaowen310/sg-bank-pdf-parser))* | Basic | Convert Singapore bank (DBS, OCBC, UOB, ICBC) PDF statements into clean Markdown tables with auto-detection |
+| [`bank-ir-consolidate`](./bank-ir-consolidate/SKILL.md) | Orchestrator | Consolidate multiple sg-bank-pdf-parser IR JSON files into one and render a cross-bank, multi-currency Markdown summary |
+| [`sg-bank-pdf-parser`](./sg-bank-pdf-parser/SKILL.md) *(submodule → [`sg-bank-pdf-parser`](https://github.com/shaowen310/sg-bank-pdf-parser))* | Basic | Convert Singapore bank (DBS, OCBC, UOB, ICBC) PDF statements into clean Markdown tables with auto-detection |
 | [`pptx-translate`](./pptx-translate/SKILL.md) | Basic | Translate PowerPoint presentations while preserving all formatting |
 | [`pptx2md`](./pptx2md/SKILL.md) | Basic | Convert `.pptx` slides to Markdown with images extracted, for editing, search, re-style, or KB ingestion |
 

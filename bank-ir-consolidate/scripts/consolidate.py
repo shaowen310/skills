@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""consolidate.py — merge multiple sg-bank-to-md IR JSON files.
+"""consolidate.py — merge multiple sg-bank-pdf-parser IR JSON files.
 
 Reads N ``*.ir.json`` (``ParsedStatement``) files, merges accounts grouped by
 ``(institution, account_no, name)``, de-duplicates transactions by ``txn_id``,
@@ -235,10 +235,10 @@ def consolidate_statements(
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Consolidate sg-bank-to-md IR JSON files.")
+    ap = argparse.ArgumentParser(description="Consolidate sg-bank-pdf-parser IR JSON files.")
     _ = ap.add_argument("inputs", nargs="+", help="Input *.ir.json files")
     _ = ap.add_argument("-o", "--out", default="consolidated.ir.json", help="Output IR JSON path")
-    _ = ap.add_argument("--parser-dir", default=None, help="Path to sg-bank-to-md skill dir")
+    _ = ap.add_argument("--parser-dir", default=None, help="Path to sg-bank-pdf-parser skill dir")
     _ = ap.add_argument("--min-ir-version", default=DEFAULT_MIN_IR_VERSION, help="Minimum accepted ir_version")
     _ = ap.add_argument("--no-dedup", action="store_true", help="Disable txn_id de-duplication")
     _ = ap.add_argument("--indent", type=int, default=2, help="JSON indent")

@@ -1,19 +1,19 @@
 ---
 name: bank-ir-consolidate
-description: Consolidate multiple sg-bank-to-md IR JSON files (*.ir.json) into a single consolidated IR and render it as a human-readable cross-bank markdown summary. Use when the user has IR JSON from multiple bank statements (DBS/OCBC/UOB/ICBC) and wants them merged into one file and/or summarized in markdown.
+description: Consolidate multiple sg-bank-pdf-parser IR JSON files (*.ir.json) into a single consolidated IR and render it as a human-readable cross-bank markdown summary. Use when the user has IR JSON from multiple bank statements (DBS/OCBC/UOB/ICBC) and wants them merged into one file and/or summarized in markdown.
 ---
 
 # Bank IR Consolidate
 
 Merges the `*.ir.json` intermediate representations produced by the
-`sg-bank-to-md` skill into one consolidated `ParsedStatement`, then renders a
+`sg-bank-pdf-parser` skill into one consolidated `ParsedStatement`, then renders a
 cross-bank, multi-account, multi-currency markdown report.
 
 ## Prerequisites
 
-- `sg-bank-to-md` skill (provides the IR schema + masking helpers via
+- `sg-bank-pdf-parser` skill (provides the IR schema + masking helpers via
   `sg_bank_pdf_parser`). The scripts resolve `sg_bank_pdf_parser` automatically
-  from the sibling `../sg-bank-to-md` directory, from `--parser-dir`, or from an
+  from the sibling `../sg-bank-pdf-parser` directory, from `--parser-dir`, or from an
   installed `sg_bank_pdf_parser` package (PyPI). No heavy parser dependencies
   (pdfplumber etc.) are imported — only the schema + masking helpers.
 
@@ -44,7 +44,7 @@ cross-bank, multi-account, multi-currency markdown report.
      native balances).
    - Per-bank, per-account transaction tables, FD records, and investment
      holdings.
-   - Masking is on by default (matches `sg-bank-to-md`); use `--no-mask` to
+   - Masking is on by default (matches `sg-bank-pdf-parser`); use `--no-mask` to
      disable.
 
    **FX rates (on-demand, cached).** FX rates are no longer hardcoded. At render
@@ -80,7 +80,7 @@ cross-bank, multi-account, multi-currency markdown report.
 
 ## Public IR contract
 
-The IR schema is defined publicly by `sg-bank-to-md`:
+The IR schema is defined publicly by `sg-bank-pdf-parser`:
 `references/ir.schema.json` (JSON Schema 2020-12) and
 `sg_bank_pdf_parser/ir_schema.py`. Downstream consumers must require
 `ir_version >= 2026.3`.

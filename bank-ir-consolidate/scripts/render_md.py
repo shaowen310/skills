@@ -3,7 +3,7 @@
 
 Reads a ``ParsedStatement`` IR JSON (typically the output of ``consolidate.py``),
 builds a render-oriented ``RenderModel`` and writes a human-readable, cross-bank
-markdown summary with masking applied (consistent with ``sg-bank-to-md``).
+markdown summary with masking applied (consistent with ``sg-bank-pdf-parser``).
 
 Usage:
     python render_md.py consolidated.ir.json -o consolidated.md
@@ -478,7 +478,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Render a bank IR JSON to markdown.")
     _ = ap.add_argument("input", help="Input *.ir.json file")
     _ = ap.add_argument("-o", "--out", default="consolidated.md", help="Output markdown path")
-    _ = ap.add_argument("--parser-dir", default=None, help="Path to sg-bank-to-md skill dir")
+    _ = ap.add_argument("--parser-dir", default=None, help="Path to sg-bank-pdf-parser skill dir")
     _ = ap.add_argument("--no-mask", action="store_true", help="Disable masking of IDs/names")
     # FX retrieval / caching options.
     _ = ap.add_argument(

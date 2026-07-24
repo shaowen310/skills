@@ -8,7 +8,7 @@ can run in a minimal environment.
 
 Resolution order (mirrors ``kb-ingest._load_pptx2md``):
   1. ``--parser-dir``  (skill dir containing ``sg_bank_pdf_parser/``)
-  2. sibling ``../sg-bank-to-md`` (relative to this file's repo root)
+  2. sibling ``../sg-bank-pdf-parser`` (relative to this file's repo root)
   3. installed package (PyPI: ``sg_bank_pdf_parser``)
 """
 
@@ -48,8 +48,8 @@ def load_parser_modules(parser_dir: str | None) -> ParserModules:
         candidates.append(Path(parser_dir))
     here = Path(__file__).resolve().parent
     # bank-ir-consolidate/scripts -> bank-ir-consolidate -> repo root
-    candidates.append(here.parent.parent / "sg-bank-to-md")
-    candidates.append(here.parent / "sg-bank-to-md")
+    candidates.append(here.parent.parent / "sg-bank-pdf-parser")
+    candidates.append(here.parent / "sg-bank-pdf-parser")
 
     pkg_dir: Path | None = None
     for cand in candidates:
@@ -74,7 +74,7 @@ def load_parser_modules(parser_dir: str | None) -> ParserModules:
         except Exception as exc:  # pragma: no cover - environment dependent
             raise RuntimeError(
                 "Could not locate sg_bank_pdf_parser. Use --parser-dir to point at the "+
-                "sg-bank-to-md skill directory, or install the package (pip install sg_bank_pdf_parser)."
+                "sg-bank-pdf-parser skill directory, or install the package (pip install sg_bank_pdf_parser)."
             ) from exc
 
     def _register_pkg(name: str, path: Path) -> None:

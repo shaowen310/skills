@@ -27,7 +27,7 @@ uses it to detect inter-bank transfers.
 
 Usage:
     python export_model.py consolidated.ir.json -o export.render-model.json
-    python export_model.py consolidated.ir.json --parser-dir ../sg-bank-to-md
+    python export_model.py consolidated.ir.json --parser-dir ../sg-bank-pdf-parser
 """
 from __future__ import annotations
 
@@ -55,7 +55,7 @@ def main() -> None:
     )
     _ = ap.add_argument(
         "--parser-dir", default=None,
-        help="Path to the sg-bank-to-md skill dir (for ir_schema)",
+        help="Path to the sg-bank-pdf-parser skill dir (for ir_schema)",
     )
     _ = ap.add_argument("--indent", type=int, default=2, help="JSON indent")
     args = ap.parse_args()
