@@ -30,6 +30,7 @@ from consolidate import (  # noqa: E402  # pyright: ignore[reportMissingImports]
     consolidate_statements,
 )
 from _parser_loader import load_parser_modules  # noqa: E402  # pyright: ignore[reportMissingImports]
+from detect_transfers import detect_inter_bank_transfers  # noqa: E402  # pyright: ignore[reportMissingImports]
 from render_md import render as render_md  # noqa: E402  # pyright: ignore[reportMissingImports]
 from render_model import build_render_model  # noqa: E402  # pyright: ignore[reportMissingImports]
 from render_model_io import save_render_model  # noqa: E402  # pyright: ignore[reportMissingImports]
@@ -100,6 +101,8 @@ def main() -> None:
     consolidated, total_in, deduped, filtered = consolidate_statements(
         stmts_with_paths, ir, do_dedup=not args.no_dedup  # type: ignore[arg-type]
     )
+    consolidated = detect_inter_bank_transfers(consolidated)
+    consolidated = pm.postprocess.verify_transfer_links(consolidated)
 
     # Resolve FX rates on demand and embed provenance into the consolidated IR.
     as_of = args.fx_date or (

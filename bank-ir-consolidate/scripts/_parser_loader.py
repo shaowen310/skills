@@ -27,6 +27,7 @@ class ParserModules:
     account_type: types.ModuleType
     common: types.ModuleType
     helpers: types.ModuleType
+    postprocess: types.ModuleType
 
     def __init__(
         self,
@@ -34,11 +35,13 @@ class ParserModules:
         account_type: types.ModuleType,
         common: types.ModuleType,
         helpers: types.ModuleType,
+        postprocess: types.ModuleType,
     ) -> None:
         self.ir_schema = ir_schema
         self.account_type = account_type
         self.common = common
         self.helpers = helpers
+        self.postprocess = postprocess
 
 
 def load_parser_modules(parser_dir: str | None) -> ParserModules:
@@ -70,6 +73,7 @@ def load_parser_modules(parser_dir: str | None) -> ParserModules:
                 account_type=__import__(f"{pkg_name}.account_type", fromlist=["account_type"]),
                 common=__import__(f"{pkg_name}.common", fromlist=["common"]),
                 helpers=__import__(f"{pkg_name}.renderers.helpers", fromlist=["helpers"]),
+                postprocess=__import__(f"{pkg_name}.postprocess", fromlist=["postprocess"]),
             )
         except Exception as exc:  # pragma: no cover - environment dependent
             raise RuntimeError(
@@ -103,4 +107,5 @@ def load_parser_modules(parser_dir: str | None) -> ParserModules:
     common = _load("common", pkg_dir / "common.py")
     ir_schema = _load("ir_schema", pkg_dir / "ir_schema.py")
     helpers = _load("renderers.helpers", pkg_dir / "renderers" / "helpers.py")
-    return ParserModules(ir_schema, account_type, common, helpers)
+    postprocess = _load("postprocess", pkg_dir / "postprocess.py")
+    return ParserModules(ir_schema, account_type, common, helpers, postprocess)

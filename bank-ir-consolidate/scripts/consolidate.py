@@ -21,6 +21,7 @@ from typing import Any
 # Allow running as a standalone script from scripts/ or the repo root.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _parser_loader import load_parser_modules  # noqa: E402
+from detect_transfers import detect_inter_bank_transfers  # noqa: E402
 
 VERSION = "0.1.0"
 DEFAULT_MIN_IR_VERSION = "2026.4"
@@ -271,6 +272,12 @@ def main() -> None:
     consolidated, total_in, deduped, filtered = consolidate_statements(
         stmts_with_paths, ir, do_dedup=not args.no_dedup
     )
+    consolidated = detect_inter_bank_transfers(consolidated)
+    consolidated = pm.postprocess.verify_transfer_links(consolidated)
+
+    transfers = (consolidated.extras or {}).get("consolidation", {}).get("transfers", {})
+    inter_bank_detected = transfers.get("inter_bank_detected", 0)
+
     out = Path(args.out)
     _ = out.write_text(consolidated.to_json(indent=args.indent), encoding="utf-8")
     total_out = total_in - deduped - filtered
@@ -279,6 +286,8 @@ def main() -> None:
         f"  inputs={len(stmts_with_paths)} accounts={len(consolidated.accounts)} "+
         f"txns_in={total_in} txns_out={total_out} deduped={deduped} filtered={filtered}"
     )
+    if inter_bank_detected:
+        print(f"  inter_bank_transfers={inter_bank_detected} pairs")
 
 
 if __name__ == "__main__":
