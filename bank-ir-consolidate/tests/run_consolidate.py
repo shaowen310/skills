@@ -125,6 +125,7 @@ def main() -> None:
         "rates_sgd_per_unit": fx.rates,
         "symbols_requested": fx.symbols_requested,
         "missing": fx.missing,
+        "warnings": fx.warnings,
     }
     extras["consolidation"] = cons
     consolidated.extras = extras

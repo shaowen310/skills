@@ -456,10 +456,13 @@ def render(
         lines.append("")
 
     # --- Warnings ---
-    if model.warnings:
+    fx_warnings = fx_result.warnings if fx_result else []
+    if model.warnings or fx_warnings:
         lines.append("## Warnings")
         lines.append("")
         for w in model.warnings:
+            lines.append(f"- {w}")
+        for w in fx_warnings:
             lines.append(f"- {w}")
         lines.append("")
 
@@ -549,6 +552,7 @@ def main() -> None:
             "rates_sgd_per_unit": fx.rates,
             "symbols_requested": fx.symbols_requested,
             "missing": fx.missing,
+            "warnings": fx.warnings,
         }
         extras["consolidation"] = cons
         stmt.extras = extras

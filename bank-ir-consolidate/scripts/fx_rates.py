@@ -176,6 +176,7 @@ class FXResult:
     symbols_requested: list[str] = field(default_factory=list)
     requested_as_of: str | None = None
     missing: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
     note: str = ""
 
 
@@ -260,10 +261,15 @@ def _build_rates(
     foreign: list[str],
     resolved: dict[str, float],
     fallback: dict[str, float],
-) -> tuple[dict[str, float], list[str]]:
-    """Merge SGD base + resolved + fallback; report symbols still missing."""
+) -> tuple[dict[str, float], list[str], list[str]]:
+    """Merge SGD base + resolved + fallback; report symbols still missing.
+
+    CNH (offshore yuan) typically tracks CNY closely.  When a dedicated CNH
+    rate is unavailable, the CNY rate is reused automatically.
+    """
     rates: dict[str, float] = {BASE_CCY: 1.0}
     missing: list[str] = []
+    warnings: list[str] = []
     for sym in foreign:
         if sym in resolved:
             rates[sym] = resolved[sym]
@@ -271,7 +277,18 @@ def _build_rates(
             rates[sym] = fallback[sym]
         else:
             missing.append(sym)
-    return rates, missing
+
+    # ── CNH → CNY fallback ───────────────────────────────────────────────
+    if "CNH" in missing and "CNY" in rates:
+        rates["CNH"] = rates["CNY"]
+        missing.remove("CNH")
+        warnings.append(
+            f"CNH rate not available from provider; using CNY rate "+
+            f"({rates['CNY']:,.4f} SGD per 1 unit). CNH ↔ CNY typically "+
+            f"track closely but may diverge intraday."
+        )
+
+    return rates, missing, warnings
 
 
 def collect_currencies(stmt: Any) -> list[str]:
@@ -331,7 +348,7 @@ def get_fx_rates(
     if not force_refresh:
         cached = _load_cache(cd, prov.name, as_of_norm)
         if cached is not None and all(s in cached.get("rates_sgd_per_unit", {}) for s in foreign):
-            rates, missing = _build_rates(foreign, cached["rates_sgd_per_unit"], fallback)
+            rates, missing, fx_warnings = _build_rates(foreign, cached["rates_sgd_per_unit"], fallback)
             return FXResult(
                 rates=rates,
                 source="cached",
@@ -341,13 +358,14 @@ def get_fx_rates(
                 symbols_requested=foreign,
                 requested_as_of=as_of_norm,
                 missing=missing,
+                warnings=fx_warnings,
                 note=f"Using cached rates ({prov.name}) for {as_of_norm}.",
             )
 
     # 2) Offline: no live fetch — fall back to cache, else to hardcoded defaults.
     if offline:
         if cached is not None:
-            rates, missing = _build_rates(foreign, cached["rates_sgd_per_unit"], fallback)
+            rates, missing, fx_warnings = _build_rates(foreign, cached["rates_sgd_per_unit"], fallback)
             return FXResult(
                 rates=rates,
                 source="cached",
@@ -357,9 +375,10 @@ def get_fx_rates(
                 symbols_requested=foreign,
                 requested_as_of=as_of_norm,
                 missing=missing,
+                warnings=fx_warnings,
                 note="Offline mode: using cached rates.",
             )
-        rates, missing = _build_rates(foreign, {}, fallback)
+        rates, missing, fx_warnings = _build_rates(foreign, {}, fallback)
         return FXResult(
             rates=rates,
             source="fallback",
@@ -369,6 +388,7 @@ def get_fx_rates(
             symbols_requested=foreign,
             requested_as_of=as_of_norm,
             missing=missing,
+            warnings=fx_warnings,
             note="Offline mode: no cache available, using hardcoded fallback rates.",
         )
 
@@ -377,7 +397,7 @@ def get_fx_rates(
         effective, live_rates = _fetch_with_backoff(prov, as_of_norm, foreign, timeout)
     except (urllib.error.URLError, TimeoutError, ValueError) as e:
         if cached is not None:
-            rates, missing = _build_rates(foreign, cached["rates_sgd_per_unit"], fallback)
+            rates, missing, fx_warnings = _build_rates(foreign, cached["rates_sgd_per_unit"], fallback)
             return FXResult(
                 rates=rates,
                 source="cached",
@@ -387,9 +407,10 @@ def get_fx_rates(
                 symbols_requested=foreign,
                 requested_as_of=as_of_norm,
                 missing=missing,
+                warnings=fx_warnings,
                 note=f"Live fetch failed ({e}); using cached rates.",
             )
-        rates, missing = _build_rates(foreign, {}, fallback)
+        rates, missing, fx_warnings = _build_rates(foreign, {}, fallback)
         return FXResult(
             rates=rates,
             source="fallback",
@@ -399,13 +420,14 @@ def get_fx_rates(
             symbols_requested=foreign,
             requested_as_of=as_of_norm,
             missing=missing,
+            warnings=fx_warnings,
             note=f"Live fetch failed ({e}); using hardcoded fallback rates.",
         )
 
     # Merge live rates over any existing cached rates, then persist.
     merged = {**(cached or {}).get("rates_sgd_per_unit", {}), **live_rates}
     _save_cache(cd, prov.name, as_of_norm, effective, merged)
-    rates, missing = _build_rates(foreign, merged, fallback)
+    rates, missing, fx_warnings = _build_rates(foreign, merged, fallback)
     return FXResult(
         rates=rates,
         source="live",
@@ -415,6 +437,7 @@ def get_fx_rates(
         symbols_requested=foreign,
         requested_as_of=as_of_norm,
         missing=missing,
+        warnings=fx_warnings,
         note=f"Fetched live rates ({prov.name}) as of {effective}.",
     )
 
