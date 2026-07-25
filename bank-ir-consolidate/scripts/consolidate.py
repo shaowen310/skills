@@ -193,9 +193,7 @@ def consolidate_statements(
             non_iso_periods.append(raw)
     meta = ir.StatementMeta(
         institution="",
-        institution_code=None,
         account_holder=None,
-        currency="",
         period_from=min(periods_from_norm) if periods_from_norm else None,
         period_to=max(periods_to_norm) if periods_to_norm else None,
     )
