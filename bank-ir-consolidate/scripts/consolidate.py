@@ -205,6 +205,7 @@ def consolidate_statements(
         account_holder=None,
         period_from=min(periods_from_norm) if periods_from_norm else None,
         period_to=max(periods_to_norm) if periods_to_norm else None,
+        functional_currency="SGD",
     )
     min_ir = min((s.ir_version for _, s in stmts_with_paths), default=DEFAULT_MIN_IR_VERSION)
     warnings: list[str] = []
