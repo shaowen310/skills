@@ -191,8 +191,17 @@ def consolidate_statements(
     for raw, norm in zip(periods_from + periods_to, periods_from_norm + periods_to_norm):
         if norm != raw and not (norm or "").startswith(("19", "20")):
             non_iso_periods.append(raw)
+    # Collect unique, non-empty institution names from all sources.
+    _insts: list[str] = []
+    _seen_inst: set[str] = set()
+    for _, s in stmts_with_paths:
+        inst = s.statement_meta.institution or ""
+        inst = inst.strip()
+        if inst and inst not in _seen_inst:
+            _seen_inst.add(inst)
+            _insts.append(inst)
     meta = ir.StatementMeta(
-        institution="",
+        institution=", ".join(_insts),
         account_holder=None,
         period_from=min(periods_from_norm) if periods_from_norm else None,
         period_to=max(periods_to_norm) if periods_to_norm else None,
