@@ -127,13 +127,13 @@ def consolidate_statements(
         )
         total_txns_in += sum(len(a.transactions) for a in stmt.accounts)
         for acc in stmt.accounts:
-            key = (meta.institution, acc.account_no, acc.name)
+            key = (meta.institution, acc.account_no, acc.currency)
             groups.setdefault(key, []).append(acc)
 
     merged_accounts = []
     deduped = 0
     filtered = 0
-    for (_inst, _no, _name), accs in groups.items():
+    for (_inst, _no, _currency), accs in groups.items():
         base = accs[0]
         txns = []
         seen: set[str] = set()
