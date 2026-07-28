@@ -21,7 +21,11 @@ from typing import Any
 # Allow running as a standalone script from scripts/ or the repo root.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _parser_loader import load_parser_modules  # noqa: E402
-from detect_transfers import detect_inter_bank_transfers, detect_intra_bank_transfers  # noqa: E402
+from detect_transfers import (  # noqa: E402
+    detect_currency_conversions,
+    detect_inter_bank_transfers,
+    detect_intra_bank_transfers,
+)
 
 VERSION = "0.1.0"
 DEFAULT_MIN_IR_VERSION = "2026.4"
@@ -274,11 +278,13 @@ def main() -> None:
     )
     consolidated = detect_inter_bank_transfers(consolidated)
     consolidated = detect_intra_bank_transfers(consolidated)
+    consolidated = detect_currency_conversions(consolidated)
     consolidated = pm.postprocess.verify_transfer_links(consolidated)
 
     transfers = (consolidated.extras or {}).get("consolidation", {}).get("transfers", {})
     inter_bank_detected = transfers.get("inter_bank_detected", 0)
     intra_bank_detected = transfers.get("intra_bank_detected", 0)
+    cc_detected = transfers.get("currency_conversion_detected", 0)
 
     out = Path(args.out)
     _ = out.write_text(consolidated.to_json(indent=args.indent), encoding="utf-8")
@@ -292,6 +298,8 @@ def main() -> None:
         print(f"  inter_bank_transfers={inter_bank_detected} pairs")
     if intra_bank_detected:
         print(f"  intra_bank_transfers={intra_bank_detected} pairs")
+    if cc_detected:
+        print(f"  currency_conversion_transfers={cc_detected} pairs")
 
 
 if __name__ == "__main__":
