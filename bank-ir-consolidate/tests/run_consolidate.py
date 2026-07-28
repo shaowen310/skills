@@ -104,7 +104,7 @@ def main() -> None:
     consolidated = detect_inter_bank_transfers(consolidated)
     consolidated = detect_intra_bank_transfers(consolidated)
     consolidated = detect_currency_conversions(consolidated)
-    consolidated = pm.postprocess.verify_transfer_links(consolidated)
+    consolidated = pm.postprocess.verify_txn_links(consolidated)
 
     # Resolve FX rates on demand and embed provenance into the consolidated IR.
     as_of = args.fx_date or (

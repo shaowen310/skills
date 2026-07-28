@@ -279,7 +279,7 @@ def main() -> None:
     consolidated = detect_inter_bank_transfers(consolidated)
     consolidated = detect_intra_bank_transfers(consolidated)
     consolidated = detect_currency_conversions(consolidated)
-    consolidated = pm.postprocess.verify_transfer_links(consolidated)
+    consolidated = pm.postprocess.verify_txn_links(consolidated)
 
     transfers = (consolidated.extras or {}).get("consolidation", {}).get("transfers", {})
     inter_bank_detected = transfers.get("inter_bank_detected", 0)

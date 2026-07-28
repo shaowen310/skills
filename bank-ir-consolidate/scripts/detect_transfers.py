@@ -32,7 +32,7 @@ When a pair is matched:
     ``"currency_conversion"`` (deduped)
   * A warning emitted to ``statement.warnings``
 
-Runs after ``consolidate_statements()`` and before ``verify_transfer_links()``.
+Runs after ``consolidate_statements()`` and before ``verify_txn_links()``.
 Idempotent: already-matched transactions are skipped.
 """
 
@@ -50,7 +50,7 @@ def detect_inter_bank_transfers(statement: Any) -> Any:
     Parameters
     ----------
     statement : ParsedStatement
-        The consolidated statement (post merge, pre verify_transfer_links).
+        The consolidated statement (post merge, pre verify_txn_links).
 
     Returns
     -------
@@ -178,7 +178,7 @@ def detect_intra_bank_transfers(statement: Any) -> Any:
     Parameters
     ----------
     statement : ParsedStatement
-        The consolidated statement (post merge, pre verify_transfer_links).
+        The consolidated statement (post merge, pre verify_txn_links).
 
     Returns
     -------
@@ -320,7 +320,7 @@ def detect_currency_conversions(statement: Any) -> Any:
     Parameters
     ----------
     statement : ParsedStatement
-        The consolidated statement (post merge, pre verify_transfer_links).
+        The consolidated statement (post merge, pre verify_txn_links).
 
     Returns
     -------
