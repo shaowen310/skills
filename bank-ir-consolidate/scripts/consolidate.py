@@ -285,6 +285,7 @@ def main() -> None:
     inter_bank_detected = transfers.get("inter_bank_detected", 0)
     intra_bank_detected = transfers.get("intra_bank_detected", 0)
     cc_detected = transfers.get("currency_conversion_detected", 0)
+    cc_payments_detected = transfers.get("cc_payments_detected", 0)
 
     out = Path(args.out)
     _ = out.write_text(consolidated.to_json(indent=args.indent), encoding="utf-8")
@@ -300,6 +301,8 @@ def main() -> None:
         print(f"  intra_bank_transfers={intra_bank_detected} pairs")
     if cc_detected:
         print(f"  currency_conversion_transfers={cc_detected} pairs")
+    if cc_payments_detected:
+        print(f"  cc_payments={cc_payments_detected} pairs")
 
 
 if __name__ == "__main__":

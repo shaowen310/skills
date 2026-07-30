@@ -150,10 +150,15 @@ def _account_institution(acc: Any) -> str:
 def _skip_in_consolidated_table(txn: Any) -> bool:
     """Internal lines excluded from the consolidated combined transaction table.
 
-    DBS labels internet-banking transfers as ``PAYMENT BY INTERNET``; these carry
+    OCBC labels internet-banking transfers as ``PAYMENT BY INTERNET``; these carry
     a negative (debit) amount and are internal/posted summaries that shouldn't
     appear in the consolidated table (nor in its totals / running net).
+
+    Transactions flagged ``is_internal_transfer`` (linked to another txn via
+    transfer detection) are also skipped to avoid double-counting.
     """
+    if txn.is_internal_transfer:
+        return True
     return txn.amount < 0 and "PAYMENT BY INTERNET" in (txn.description or "").upper()
 
 

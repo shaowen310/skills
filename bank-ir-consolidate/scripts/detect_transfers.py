@@ -10,6 +10,9 @@ pairs where money moved between accounts:
   * **Currency Conversion**: multi-currency internal transfers within the same
     bank (e.g. UOB "Currency Conversion" SGD↔JPY, SGD↔USD). Matched by
     description prefix "Currency Conversion" and a shared trailing numeric ID.
+  * **CC Payment**: credit card payments from a current account to a credit
+    card at the *same* institution (e.g. Current Account → Credit Card $500).
+    Matched by absolute amount (not sum, since both sides can be negative).
 
 These are internal transfers that should be flagged to avoid double-counting in
 net-worth calculations.
@@ -28,8 +31,8 @@ Detection rules (all must hold):
 When a pair is matched:
   * ``is_internal_transfer = True`` on BOTH transactions
   * ``linked_txn_ids`` cross-linked bidirectionally
-  * ``transfer_labels`` appended with ``"inter_bank"``, ``"intra_bank"``, or
-    ``"currency_conversion"`` (deduped)
+  * ``transfer_labels`` appended with ``"inter_bank"``, ``"intra_bank"``,
+    ``"currency_conversion"``, or ``"cc_payment"`` (deduped)
   * A warning emitted to ``statement.warnings``
 
 Runs after ``consolidate_statements()`` and before ``verify_txn_links()``.
@@ -385,6 +388,148 @@ def detect_currency_conversions(statement: Any) -> Any:
     cons = dict(extras.get("consolidation", {}) or {})
     transfers_extras = dict(cons.get("transfers", {}) or {})
     transfers_extras["currency_conversion_detected"] = matched_pairs
+    cons["transfers"] = transfers_extras
+    extras["consolidation"] = cons
+    statement.extras = extras
+
+    return statement
+
+
+def detect_cc_payments(statement: Any) -> Any:
+    """Detect and link credit card payments from current accounts to credit card
+    transactions at the same bank.
+
+    When a current account makes a credit card payment (e.g. DBS Current Account
+    $500 debit → DBS Credit Card $500 credit), the statement shows a debit on the
+    current account side and a corresponding credit on the credit card side, both
+    posted on the same date with opposite amounts.
+
+    Detection rules (all must hold):
+      1. Same institution
+      2. One ``current`` account + one ``credit_card`` account
+      3. Same ``posted_date``
+      4. Same absolute amount (magnitudes match within ``1e-2``):
+         ``abs(abs(A.amount) - abs(B.amount)) < 1e-2``
+         (CC payment credits are negative in card accounting, same sign as
+         the CA debit — we compare magnitudes, not sums.)
+      5. Different account numbers
+      6. Neither transaction already flagged ``is_internal_transfer``
+
+    Mutates and returns *statement*. Idempotent (skips already-linked txns).
+
+    Parameters
+    ----------
+    statement : ParsedStatement
+        The consolidated statement (post merge, pre verify_txn_links).
+
+    Returns
+    -------
+    ParsedStatement
+        The same statement, mutated in place with links and warnings added.
+    """
+    # Build (account_no → institution) lookup from Account.institution.
+    institution_by_account: dict[str, str] = {}
+    for acct in statement.accounts:
+        inst = (acct.institution or "").strip()
+        if inst:
+            institution_by_account[acct.account_no] = inst
+
+    # Index candidate transactions by posted_date. A CC payment can only pair
+    # a current account entry with a credit_card account entry, so each date
+    # group must contain at least one of each role.
+    by_date: dict[str, list[tuple[int, Any, Any, str]]] = {}
+    for ai, acct in enumerate(statement.accounts):
+        if acct.account_type not in ("current", "credit_card"):
+            continue
+        for _, txn in enumerate(acct.transactions or []):
+            if not txn.posted_date:
+                continue
+            if txn.is_internal_transfer:
+                continue
+            by_date.setdefault(txn.posted_date, []).append(
+                (ai, acct, txn, acct.account_type)
+            )
+
+    matched_pairs = 0
+    for posted_date, entries in by_date.items():
+        n = len(entries)
+        if n < 2:
+            continue
+
+        used: set[int] = set()
+
+        for i in range(n):
+            if i in used:
+                continue
+            _, acct_a, txn_a, role_a = entries[i]
+            inst_a = institution_by_account.get(acct_a.account_no, "")
+            if not inst_a:
+                continue
+
+            for j in range(i + 1, n):
+                if j in used:
+                    continue
+                _, acct_b, txn_b, role_b = entries[j]
+
+                # Must be opposite roles: one current, one credit_card.
+                if role_a == role_b:
+                    continue
+
+                # Must be same institution.
+                inst_b = institution_by_account.get(acct_b.account_no, "")
+                if not inst_b or inst_a != inst_b:
+                    continue
+
+                # Must be different accounts.
+                if acct_a.account_no == acct_b.account_no:
+                    continue
+
+                # Must be matching absolute amounts (within tolerance).
+                # In credit card accounting, a payment to the card is a credit
+                # (negative amount reducing the balance owed), same sign as the
+                # current account debit — so we compare magnitudes, not sums.
+                if abs(abs(txn_a.amount) - abs(txn_b.amount)) > 1e-2:
+                    continue
+
+                # Match found — cross-link IDs and label, but do NOT set
+                # is_internal_transfer.  A CC payment is a real outflow
+                # (paying down debt), not just moving money between own accounts.
+                used.add(i)
+                used.add(j)
+
+                # Cross-link txn_ids bidirectionally.
+                if txn_b.txn_id not in txn_a.linked_txn_ids:
+                    txn_a.linked_txn_ids = list(txn_a.linked_txn_ids) + [txn_b.txn_id]
+                if txn_a.txn_id not in txn_b.linked_txn_ids:
+                    txn_b.linked_txn_ids = list(txn_b.linked_txn_ids) + [txn_a.txn_id]
+
+                # Append label to transfer_labels on both sides.
+                for lbl in ("cc_payment",):
+                    if lbl not in txn_a.transfer_labels:
+                        txn_a.transfer_labels = list(txn_a.transfer_labels) + [lbl]
+                    if lbl not in txn_b.transfer_labels:
+                        txn_b.transfer_labels = list(txn_b.transfer_labels) + [lbl]
+
+                matched_pairs += 1
+
+                # Determine which is current and which is CC for the warning.
+                ca_acct = acct_a if role_a == "current" else acct_b
+                cc_acct = acct_a if role_a == "credit_card" else acct_b
+                warn = (
+                    f"CC payment detected: "
+                    f"(CA {ca_acct.account_no}, {inst_a}) → "
+                    f"(CC {cc_acct.account_no}, {inst_a}), "
+                    f"amount {abs(txn_a.amount):,.2f}, date {posted_date}"
+                )
+                if warn not in statement.warnings:
+                    statement.warnings.append(warn)
+                break  # One match per txn_a; move to next txn_a.
+
+    # Record detection stats in extras.
+    extras = dict(statement.extras or {})
+    cons = dict(extras.get("consolidation", {}) or {})
+    transfers_extras = dict(cons.get("transfers", {}) or {})
+    transfers_extras["cc_payments_detected"] = matched_pairs
     cons["transfers"] = transfers_extras
     extras["consolidation"] = cons
     statement.extras = extras

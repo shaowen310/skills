@@ -400,10 +400,16 @@ def render(
                 lines.append("| --- | --- | ---: | ---: | ---: |")
                 cc_running: dict[str, float] = {}
                 for t in acc.transactions:
-                    # Skip internal "PAYMENT BY INTERNET" lines (negative amount).
+                    # Skip internal "PAYMENT BY INTERNET" lines (negative amount)
+                    # unless they are linked to a credit card payment.
+                    is_cc_payment = False
                     if t.amount < 0 and "PAYMENT BY INTERNET" in (t.description or "").upper():
-                        continue
+                        if "cc_payment" not in (t.transfer_labels or []):
+                            continue
+                        is_cc_payment = True
                     desc = mask_desc(t.description, do_mask=do_mask) if do_mask else t.description
+                    if is_cc_payment:
+                        desc += " 🔄"
                     if t.amount < 0:
                         wd, dp = _money(abs(t.amount), t.currency), ""
                         cc_running[t.currency] = cc_running.get(t.currency, 0.0) - abs(t.amount)
