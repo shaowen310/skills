@@ -113,6 +113,9 @@ def consolidate_statements(
 ) -> tuple[Any, int, int, int]:
     """``stmts_with_paths`` is a list of (path, ParsedStatement)."""
     groups: dict[tuple[str, str, str], list[Any]] = {}
+    # Track the source statement meta for each account key so we can fill
+    # period_from/period_to on the merged Account.
+    key_periods: dict[tuple[str, str, str], tuple[str | None, str | None]] = {}
     sources: list[dict[str, Any]] = []
     total_txns_in = 0
 
@@ -133,6 +136,11 @@ def consolidate_statements(
         for acc in stmt.accounts:
             key = (meta.institution, acc.account_no, acc.currency)
             groups.setdefault(key, []).append(acc)
+            # Record the source statement period for this account (first
+            # source wins; later duplicates of the same account should carry
+            # the same period).
+            if key not in key_periods:
+                key_periods[key] = (meta.period_from, meta.period_to)
 
     merged_accounts = []
     deduped = 0
@@ -160,6 +168,8 @@ def consolidate_statements(
 
         extras = dict(base.extras or {})
 
+        p_from, p_to = key_periods.get((_inst, _no, _currency), (None, None))
+
         merged_accounts.append(
             ir.Account(
                 name=base.name,
@@ -168,6 +178,8 @@ def consolidate_statements(
                 currency=base.currency,
                 account_holder=base.account_holder,
                 institution=_inst,
+                period_from=p_from,
+                period_to=p_to,
                 opening_balance=base.opening_balance,
                 closing_balance=base.closing_balance,
                 transactions=txns,
