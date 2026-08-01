@@ -22,6 +22,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _parser_loader import load_parser_modules  # noqa: E402
 from detect_transfers import (  # noqa: E402
+    detect_cc_payments,
     detect_currency_conversions,
     detect_inter_bank_transfers,
     detect_intra_bank_transfers,
@@ -291,6 +292,7 @@ def main() -> None:
     consolidated = detect_inter_bank_transfers(consolidated)
     consolidated = detect_intra_bank_transfers(consolidated)
     consolidated = detect_currency_conversions(consolidated)
+    consolidated = detect_cc_payments(consolidated)
     consolidated = pm.postprocess.verify_txn_links(consolidated)
 
     transfers = (consolidated.extras or {}).get("consolidation", {}).get("transfers", {})

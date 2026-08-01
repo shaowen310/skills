@@ -491,25 +491,11 @@ def detect_cc_payments(statement: Any) -> Any:
                 if abs(abs(txn_a.amount) - abs(txn_b.amount)) > 1e-2:
                     continue
 
-                # Match found — cross-link IDs and label, but do NOT set
-                # is_internal_transfer.  A CC payment is a real outflow
-                # (paying down debt), not just moving money between own accounts.
+                # Match found — cross-link.
                 used.add(i)
                 used.add(j)
 
-                # Cross-link txn_ids bidirectionally.
-                if txn_b.txn_id not in txn_a.linked_txn_ids:
-                    txn_a.linked_txn_ids = list(txn_a.linked_txn_ids) + [txn_b.txn_id]
-                if txn_a.txn_id not in txn_b.linked_txn_ids:
-                    txn_b.linked_txn_ids = list(txn_b.linked_txn_ids) + [txn_a.txn_id]
-
-                # Append label to transfer_labels on both sides.
-                for lbl in ("cc_payment",):
-                    if lbl not in txn_a.transfer_labels:
-                        txn_a.transfer_labels = list(txn_a.transfer_labels) + [lbl]
-                    if lbl not in txn_b.transfer_labels:
-                        txn_b.transfer_labels = list(txn_b.transfer_labels) + [lbl]
-
+                _cross_link(txn_a, txn_b, labels=("cc_payment",))
                 matched_pairs += 1
 
                 # Determine which is current and which is CC for the warning.

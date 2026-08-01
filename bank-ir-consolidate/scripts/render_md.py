@@ -404,7 +404,7 @@ def render(
                     # unless they are linked to a credit card payment.
                     is_cc_payment = False
                     if t.amount < 0 and "PAYMENT BY INTERNET" in (t.description or "").upper():
-                        if "cc_payment" not in (t.transfer_labels or []):
+                        if not t.is_internal_transfer:
                             continue
                         is_cc_payment = True
                     desc = mask_desc(t.description, do_mask=do_mask) if do_mask else t.description
