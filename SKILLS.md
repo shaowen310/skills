@@ -2,8 +2,6 @@
 
 A detailed index of the reusable skills available in this repository. For repository overview and usage instructions, see the [main README](./README.md).
 
-> **Note:** `sg-bank-pdf-parser` is now a **git submodule** pointing to [`shaowen310/sg-bank-pdf-parser`](https://github.com/shaowen310/sg-bank-pdf-parser). Clone this repo with `git clone --recurse-submodules` (or run `git submodule update --init`) so the folder is populated. The skill itself is now versioned in that standalone repository.
-
 ## Basic Skills
 
 Atomic, single-purpose capabilities.
@@ -56,29 +54,7 @@ Atomic, single-purpose capabilities.
 - **Tech Stack**: Python (stdlib only, `argparse` + `re`)
 - **[Learn more →](./meeting-minutes/SKILL.md)**
 
-### 4. `sg-bank-pdf-parser` — SG Bank Statement to Markdown
-
-**Convert Singapore bank (DBS, OCBC, UOB, ICBC) PDF statements into clean Markdown tables.**
-
-- **Description**: Transform Singapore bank PDF statements into structured Markdown. Auto-detects the source bank (DBS, OCBC, UOB, ICBC) and the statement family — DBS/POSB consolidated, OCBC bank account, OCBC credit card, ICBC bilingual, UOB single-account transaction, UOB One multi-account transaction, or UOB multi-account portfolio summary.
-- **Features**:
-  - **DBS/POSB consolidated statements** — Parses consolidated statements with Account Summary (CASA + Fixed Deposits), SRS with Unit Trusts, and multi-account Transaction Details (Savings Plus, My Account multi-currency, Fixed Deposit, SRS Account)
-  - **OCBC bank account statements** — Parses consolidated statements with multiple accounts (STATEMENT SAVINGS, 360 ACCOUNT, TIME DEPOSITS), transaction tables (Date / Value Date / Description / Cheque / Withdrawal / Deposit / Balance), opening/closing balances, and per-section totals
-  - **OCBC credit card statements** — Single transaction-date column, parenthesized credits, dedicated Currency / Amount column for foreign-currency transactions, and a reconciliation block
-  - **ICBC bilingual statements** — Parses English/Chinese bilingual statements with multi-currency Current Account (CNY/SGD/USD) and Fixed Deposit transactions; per-currency Total Dr./Cr. summaries
-  - **UOB single-account statements** — 5-column transaction table (Date / Description / Withdrawals / Deposits / Balance), opening balance from BALANCE B/F, and multi-line description handling
-  - **UOB One multi-account statements** — Multiple `Account Transaction Details` sections per PDF (One Account SGD plus FX+ currency sub-accounts), each with its own `BALANCE B/F`, transaction rows, and `Total` line; continuation pages merged automatically
-  - **UOB multi-account portfolio** — Portfolio Overview, Deposits, and Investments tables with totals, footnote resolution, and foreign-exchange reference rates
-  - **Auto-detection** — Automatically identifies the source bank and statement family; no configuration needed
-  - **Right-aligned number handling** — Classifies amounts by their x1 edge instead of text order, overcoming interleaved text extraction
-  - **Sensitive data masking** — Masks account numbers, card numbers, deposit numbers (shows only last 4 digits); masks long numeric IDs (4+ digits) in descriptions; masks Singapore NRIC/FIN numbers (fully replaced with `[NRIC]`); automatically masks person names in transaction descriptions (context-aware: preserves UEN businesses, bank codes, and reference numbers); fixes PDF extraction artifacts like fused brackets
-  - **Structured IR JSON output** — Alongside human-readable Markdown, produces a schema-versioned `.ir.json` with typed transaction fields (`posted_date`, `amount`, `currency`, `cashflow_type`, `txn_id` for dedup, etc.) for downstream cashflow analysis and multi-bank consolidation
-- **Use When**: User asks to convert a Singapore bank statement PDF to Markdown, extract transactions from DBS/OCBC/UOB/ICBC PDFs, or turn a bank PDF into a readable table
-- **Triggers**: "Convert this DBS/OCBC/UOB/ICBC statement PDF to Markdown", "Extract transactions from my bank statement", "Turn my credit card PDF into a table", "Summarize my UOB portfolio statement", "Convert my ICBC/UOB One statement to Markdown"
-- **Tech Stack**: Python, `pdfplumber`
-- **[Learn more →](./sg-bank-pdf-parser/SKILL.md)**
-
-### 5. `docx2md` — Word to Markdown
+### 4. `docx2md` — Word to Markdown
 
 **Convert Word `.docx` files to clean Markdown with images extracted to an `assets/` folder.**
 
@@ -96,7 +72,7 @@ Atomic, single-purpose capabilities.
 - **Tech Stack**: Python, `python-docx` + `Pillow`
 - **[Learn more →](./docx2md/SKILL.md)**
 
-### 6. `pptx2md` — PowerPoint to Markdown
+### 5. `pptx2md` — PowerPoint to Markdown
 
 **Convert PowerPoint `.pptx` files to Markdown with images extracted into an `assets/` folder, preserving original text, reading order, tables, and swimlane diagrams.**
 
@@ -151,19 +127,3 @@ Composite workflows that chain one or more basic skills.
 - **Complementary Skills**: Depends on **`meeting-minutes`** for the `.md` output
 - **[Learn more →](./meeting-minutes-export/SKILL.md)**
 
-### 8. `bank-ir-consolidate` — Consolidate & Summarize Bank IR JSON
-
-**Merge multiple sg-bank-pdf-parser IR JSON files into one consolidated IR and render a cross-bank, multi-currency Markdown summary.**
-
-- **Description**: A downstream consumer of `sg-bank-pdf-parser`. Takes N `*.ir.json` (`ParsedStatement`) files — e.g. from DBS, OCBC, UOB, ICBC — and merges them into a single consolidated `ParsedStatement`, then renders a human-readable Markdown report. No PDF parsing required; it only needs the schema + masking helpers from `sg_bank_pdf_parser`.
-- **Features**:
-  - **Consolidation** — groups accounts by `(institution, account_no, name)`, concatenates transactions across statements, and de-duplicates by `txn_id` (handles overlapping statement periods)
-  - **Version gate** — carries forward the minimum `ir_version` and refuses IR older than `2026.4` (enforced by `from_json`)
-  - **Provenance** — records every source file, parser, period, and counts in `extras.consolidation.sources`; dedup count tracked
-  - **Cross-bank Markdown** — Net Position (SGD-equivalent via FX rates, plus per-currency balances), per-bank/per-account transaction tables, Fixed Deposit and Investment holdings sections
-  - **Consistent masking** — reuses `sg_bank_pdf_parser`'s masking helpers so account/deposit numbers and names stay masked, matching `sg-bank-pdf-parser` (disable with `--no-mask`)
-- **Use When**: User has IR JSON from multiple bank statements and wants them merged into one file and/or summarized in Markdown
-- **Triggers**: "consolidate bank IR JSON", "merge DBS/OCBC/UOB/ICBC statements", "multi-bank summary markdown", "combine bank statement IR", "merge *.ir.json"
-- **Tech Stack**: Python (stdlib `argparse`, `json`, `datetime`); depends on `sg-bank-pdf-parser` for the IR schema (`sg_bank_pdf_parser`)
-- **Complementary Skills**: Depends on **`sg-bank-pdf-parser`** for the `.ir.json` input and the published IR schema (`references/ir.schema.json`)
-- **[Learn more →](./bank-ir-consolidate/SKILL.md)**
